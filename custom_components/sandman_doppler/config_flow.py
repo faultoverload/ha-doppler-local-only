@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
+import asyncio
 import base64
+import hashlib
 import logging
 
+import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -56,16 +58,16 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): str,
+                    vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): cv.string,
                     vol.Required(
-                        CONF_PORT, default=user_input.get(CONF_PORT, 443)
+                        CONF_PORT, default=user_input.get(CONF_PORT, 80)
                     ): vol.Coerce(int),
                     vol.Required(
                         CONF_LOCAL_KEY, default=user_input.get(CONF_LOCAL_KEY, "")
-                    ): str,
+                    ): cv.string,
                     vol.Required(
                         CONF_DSN, default=user_input.get(CONF_DSN, "")
-                    ): str,
+                    ): cv.string,
                 }
             ),
             errors=errors,
@@ -87,22 +89,22 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         4. Test with GET /{dsn}/hardware/volume
         """
         session = async_get_clientsession(self.hass)
-        base_url = f"https://{host}:{port}"
+        base_url = f"http://{host}:{port}"
 
         try:
             # Step 1: Fetch nonce
             async with session.get(
                 f"{base_url}/{dsn}/nonce",
                 ssl=False,
-                timeout=10,
+                timeout=aiohttp.ClientTimeout(10),
             ) as resp:
                 if resp.status != 200:
                     _LOGGER.error("Nonce fetch failed: HTTP %s", resp.status)
                     return False
-                nonce_json = await resp.json()
-                nonce = nonce_json.get("nonce")
+                nonce = await resp.text()
+                nonce = nonce.strip()
                 if not nonce:
-                    _LOGGER.error("No nonce in response: %s", nonce_json)
+                    _LOGGER.error("Empty nonce in response")
                     return False
 
             # Step 2: Compute auth token
@@ -116,7 +118,7 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 f"{base_url}/{dsn}/hardware/volume",
                 headers={"Authorization": f"Bearer {final_key}"},
                 ssl=False,
-                timeout=10,
+                timeout=aiohttp.ClientTimeout(10),
             ) as resp:
                 if resp.status != 200:
                     _LOGGER.error(
@@ -131,8 +133,8 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
             return True
 
-        except Exception as exc:
-            _LOGGER.error(
+        except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError) as exc:
+            _LOGGER.debug(
                 "Connection to Doppler at %s:%s failed: %s",
                 host, port, exc,
             )
