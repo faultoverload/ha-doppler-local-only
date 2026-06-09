@@ -3,9 +3,9 @@
   "name": "Sandman Doppler",
   "codeowners": ["@raman325"],
   "config_flow": true,
-  "documentation": "https://github.com/pa-innovation/ha-doppler",
+  "documentation": "https://github.com/faultoverload/ha-doppler-local-only",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/pa-innovation/ha-doppler/issues",
+  "issue_tracker": "https://github.com/faultoverload/ha-doppler-local-only/issues",
   "requirements": ["doppyler==0.0.20"],
-  "version": "0.0.0"
+  "version": "1.0.0-local"
 }

@@ -3,16 +3,18 @@
     "step": {
       "user": {
         "data": {
-          "email": "Email",
-          "password": "Password"
+          "host": "IP Address / Hostname",
+          "port": "Port",
+          "local_key": "Local Key (from Doppler CLI)",
+          "dsn": "Device Serial Number (DSN)"
         }
       }
     },
     "error": {
-      "auth": "Email/Password is wrong."
+      "cannot_connect": "Failed to connect. Check the IP address, port, and local key."
     },
     "abort": {
-      "already_configured": "Account is already configured"
+      "already_configured": "Device is already configured"
     }
   },
   "device_automation": {

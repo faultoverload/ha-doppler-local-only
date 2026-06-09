@@ -4,6 +4,12 @@
 NAME = "Sandman Doppler"
 DOMAIN = "sandman_doppler"
 
+# Config flow constants
+CONF_HOST = "host"
+CONF_PORT = "port"
+CONF_LOCAL_KEY = "local_key"
+CONF_DSN = "dsn"
+
 ATTR_DSN = "dsn"
 ATTR_BUTTON = "button"
 CONF_SUBTYPE = "subtype"

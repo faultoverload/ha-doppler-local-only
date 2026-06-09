@@ -1,10 +1,9 @@
-"""The Sandman Doppler integration."""
+"""The Sandman Doppler integration (local-only)."""
 
 from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-import functools
 import logging
 from typing import Any
 
@@ -12,23 +11,17 @@ from doppyler.client import DopplerClient
 from doppyler.exceptions import DopplerException
 from doppyler.model.doppler import Doppler
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
-from homeassistant.const import (
-    CONF_EMAIL,
-    CONF_PASSWORD,
-    EVENT_HOMEASSISTANT_STARTED,
-    Platform,
-)
-from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.network import get_url
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_LOCAL_KEY, CONF_DSN
 from .http import DopplerWebhookView
 from .services import DopplerServices
 
@@ -47,19 +40,6 @@ PLATFORMS = [
 ]
 
 
-async def _get_devices(client: DopplerClient, _now: Any = None) -> None:
-    """Helper function to get devices from cloud.
-
-    Args:
-        client: The Doppler client instance.
-        _now: Optional datetime passed by async_track_time_interval (unused).
-    """
-    try:
-        await client.get_devices()
-    except DopplerException as err:
-        _LOGGER.warning("Error getting devices: %s", err)
-
-
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Sandman Doppler component."""
     hass.http.register_view(DopplerWebhookView())
@@ -67,15 +47,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up config entry."""
+    """Set up config entry (local-only, no cloud auth)."""
     hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
 
-    email = entry.data[CONF_EMAIL]
-    password = entry.data[CONF_PASSWORD]
+    # Read local config from entry
+    host = entry.data[CONF_HOST]
+    port = entry.data[CONF_PORT]
+    local_key = entry.data[CONF_LOCAL_KEY]
+    dsn = entry.data[CONF_DSN]
 
     session = async_get_clientsession(hass)
+
+    # Create a minimal DopplerClient (no cloud auth) — needed only as HTTP
+    # transport for Doppler._call_local_api() which uses client.request()
     client = DopplerClient(
-        email, password, client_session=session, local_api_semaphore_limit=1
+        "", "", client_session=session, local_api_semaphore_limit=1
     )
 
     dev_reg = dr.async_get(hass)
@@ -85,60 +71,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN][entry.entry_id]["platform_setup_complete"] = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    @callback
-    def async_on_device_added(doppler: Doppler) -> None:
-        """Handle device added."""
-        # Create a new coordinator and device registry entry for every new device and
-        # trigger an initial refresh to get information
-        _LOGGER.debug("Doppler added: %s", doppler)
-        dev_entry = dev_reg.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, doppler.dsn)},
-            manufacturer=doppler.device_info.manufacturer,
-            model=doppler.device_info.model_number,
-            sw_version=doppler.device_info.software_version,
-            hw_version=doppler.device_info.firmware_version,
-            name=doppler.name,
-        )
-        hass.data[DOMAIN][entry.entry_id][doppler.dsn] = coordinator = (
-            DopplerDataUpdateCoordinator(hass, entry, client, doppler, dev_entry)
-        )
-        hass.async_create_task(coordinator.async_refresh())
+    # Build device info (DSN is the only field we must get right; others are cosmetic)
+    device_info = {
+        "serialNum": dsn,
+        "mfgrName": "Palo Alto Innovation",
+        "modelNum": "Doppler",
+        "firmware": "",
+        "hardware": "",
+        "software": "",
+    }
 
-    @callback
-    def async_on_device_removed(doppler: Doppler) -> None:
-        """Handle device removed."""
-        _LOGGER.debug("Doppler removed: %s", doppler)
-        dev_entry = dev_reg.async_get_device({(DOMAIN, doppler.dsn)})
-        assert dev_entry
-        dev_reg.async_remove_device(dev_entry.id)
-        hass.data[DOMAIN][entry.entry_id].pop(doppler.dsn)
+    # Build local info from config
+    local_info = {
+        "localkey": local_key,
+        "ipAddie": host,
+        "port": port,
+    }
 
-    entry.async_on_unload(client.on_device_added(async_on_device_added))
-    entry.async_on_unload(client.on_device_removed(async_on_device_removed))
-
-    try:
-        await client.get_token()
-    except DopplerException as err:
-        raise ConfigEntryNotReady from err
-
-    # Every five minutes we will query for new devices - this will activate our add
-    # and remove device listeners if the list changes
-    entry.async_on_unload(
-        async_track_time_interval(
-            hass, functools.partial(_get_devices, client), timedelta(minutes=5)
-        )
+    # Create the Doppler object directly — no cloud calls
+    doppler = Doppler(
+        client,
+        dsn,
+        device_info,
+        local_info,
+        local_control=True,
+        local_api_semaphore_limit=1,
     )
 
-    # Since getting devies can take some time, we delay querying until after startup
-    # so we don't hold everything up.
-    if hass.state == CoreState.running:
-        hass.async_create_task(_get_devices(client))
-    else:
-        hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STARTED,
-            lambda _: hass.async_create_task(_get_devices(client)),
-        )
+    # Register device and create coordinator
+    dev_entry = dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, doppler.dsn)},
+        manufacturer=doppler.device_info.manufacturer,
+        model=doppler.device_info.model_number,
+        sw_version=doppler.device_info.software_version,
+        hw_version=doppler.device_info.firmware_version,
+        name=doppler.name,
+    )
+
+    hass.data[DOMAIN][entry.entry_id][doppler.dsn] = coordinator = (
+        DopplerDataUpdateCoordinator(hass, entry, client, doppler, dev_entry)
+    )
+    hass.async_create_task(coordinator.async_refresh())
+
+    # Store doppler in client.devices so DopplerServices lookups resolve
+    client.devices[dsn] = doppler
 
     DopplerServices(hass, ent_reg, dev_reg, client).async_register()
 

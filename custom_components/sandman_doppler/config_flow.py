@@ -1,22 +1,26 @@
-"""Adds config flow for Doppler."""
+"""Adds config flow for Doppler (local-only)."""
 
 from __future__ import annotations
 
-from doppyler.client import DopplerClient
-from doppyler.exceptions import DopplerException
+import hashlib
+import base64
+import logging
+
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_LOCAL_KEY, CONF_DSN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Doppler clocks."""
+    """Config flow for Doppler clocks (local-only)."""
 
     VERSION = 1
 
@@ -25,17 +29,26 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            await self.async_set_unique_id(user_input[CONF_EMAIL])
+            await self.async_set_unique_id(user_input[CONF_DSN])
             self._abort_if_unique_id_configured()
 
-            if await self._credentials_valid(
-                user_input[CONF_EMAIL], user_input[CONF_PASSWORD]
+            if await self._connection_valid(
+                user_input[CONF_HOST],
+                int(user_input[CONF_PORT]),
+                user_input[CONF_LOCAL_KEY],
+                user_input[CONF_DSN],
             ):
                 return self.async_create_entry(
-                    title=user_input[CONF_EMAIL], data=user_input
+                    title=f"Doppler ({user_input[CONF_DSN]})",
+                    data={
+                        CONF_HOST: user_input[CONF_HOST],
+                        CONF_PORT: int(user_input[CONF_PORT]),
+                        CONF_LOCAL_KEY: user_input[CONF_LOCAL_KEY],
+                        CONF_DSN: user_input[CONF_DSN],
+                    },
                 )
             else:
-                errors["base"] = "auth"
+                errors["base"] = "cannot_connect"
 
         user_input = user_input or {}
 
@@ -43,23 +56,84 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): str,
                     vol.Required(
-                        CONF_EMAIL, default=user_input.get(CONF_EMAIL)
-                    ): cv.string,
+                        CONF_PORT, default=user_input.get(CONF_PORT, 443)
+                    ): vol.Coerce(int),
                     vol.Required(
-                        CONF_PASSWORD, default=user_input.get(CONF_PASSWORD)
-                    ): cv.string,
+                        CONF_LOCAL_KEY, default=user_input.get(CONF_LOCAL_KEY, "")
+                    ): str,
+                    vol.Required(
+                        CONF_DSN, default=user_input.get(CONF_DSN, "")
+                    ): str,
                 }
             ),
             errors=errors,
         )
 
-    async def _credentials_valid(self, email: str, password: str) -> bool:
-        """Return true if credentials are valid."""
+    async def _connection_valid(
+        self,
+        host: str,
+        port: int,
+        local_key: str,
+        dsn: str,
+    ) -> bool:
+        """Validate connection to the local Doppler device.
+
+        Mirrors the nonce-based auth from doppyler lib:
+        1. GET /{dsn}/nonce → nonce string
+        2. SHA256(nonce + local_key) → base64 digest
+        3. Bearer token = "{nonce}|{base64_digest}"
+        4. Test with GET /{dsn}/hardware/volume
+        """
         session = async_get_clientsession(self.hass)
-        client = DopplerClient(email, password, client_session=session)
+        base_url = f"https://{host}:{port}"
+
         try:
-            await client.get_token()
-        except DopplerException:
+            # Step 1: Fetch nonce
+            async with session.get(
+                f"{base_url}/{dsn}/nonce",
+                ssl=False,
+                timeout=10,
+            ) as resp:
+                if resp.status != 200:
+                    _LOGGER.error("Nonce fetch failed: HTTP %s", resp.status)
+                    return False
+                nonce_json = await resp.json()
+                nonce = nonce_json.get("nonce")
+                if not nonce:
+                    _LOGGER.error("No nonce in response: %s", nonce_json)
+                    return False
+
+            # Step 2: Compute auth token
+            m = hashlib.sha256()
+            m.update(nonce.encode("ascii"))
+            m.update(local_key.encode("ascii"))
+            final_key = f"{nonce}|{base64.b64encode(m.digest()).decode('ascii')}"
+
+            # Step 3: Test with an authenticated request
+            async with session.get(
+                f"{base_url}/{dsn}/hardware/volume",
+                headers={"Authorization": f"Bearer {final_key}"},
+                ssl=False,
+                timeout=10,
+            ) as resp:
+                if resp.status != 200:
+                    _LOGGER.error(
+                        "Auth test failed: HTTP %s (invalid local_key?)",
+                        resp.status,
+                    )
+                    return False
+
+            _LOGGER.info(
+                "Successfully connected to Doppler %s at %s:%s",
+                dsn, host, port,
+            )
+            return True
+
+        except Exception as exc:
+            _LOGGER.error(
+                "Connection to Doppler at %s:%s failed: %s",
+                host, port, exc,
+            )
             return False
-        return True
