@@ -39,6 +39,41 @@ To install this integration into your Home Assistant we are recommending your us
 7. Restart Home Assistant.
 8. In the HA UI go to "Configuration" -> "Integrations" click "+" and search for "Sandman Doppler".
 
+## Prerequisites: Finding Your Device Details
+
+This local-only fork needs four values to connect: the device's **IP address**, **port** (typically 443 or 5443), **DSN** (serial number), and **local key**. The first two are easy, the last two require extraction from the Sandman Clocks Android app.
+
+### IP Address & Port
+
+Check your router's DHCP leases, or find the Doppler in the Sandman app's device settings. The default port is **5443** on newer firmware.
+
+### DSN & Local Key (Android — requires root or patched APK)
+
+The Sandman Clocks app stores the device serial number (DSN) and local key in its private data directory. Modern Android sandboxing prevents access without:
+
+- **Root access** — browse `/data/data/com.sandman.app/shared_prefs/` for the app's preferences file, or
+- **A patched APK** — patch the APK with a tool like [MorpheApp](https://github.com/MorpheApp) to enable debugging, install it, then extract the preferences:
+
+```
+run-as com.sandman.app cat /data/data/com.sandman.app/shared_prefs/com.sandman.app_preferences.xml
+```
+
+The output will look like this (your actual values will differ):
+
+```xml
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?><map>
+    <string name="Doppler-XXXXXXXX_localIP">10.0.2.31:5443</string>
+    <string name="Doppler-XXXXXXXX_finalToken">F1k3TaKeN0tChAnGeMe=xR4nDom1234567890abcdefghij</string>
+    <string name="Doppler-XXXXXXXX_localKey">AbCdEfGh12IjKlMn34OpQrStUvWxYz56</string>
+    <int name="Doppler-XXXXXXXX_finalTokenTimestamp" value="20614" />
+</map>
+```
+
+- **DSN** → the prefix of the preference keys (e.g., `Doppler-XXXXXXXX`)
+- **IP & Port** → the `..._localIP` value (`10.0.2.31:5443`)
+- **Local Key** → the `..._localKey` value
+
+
 <!---->
 
 ## Usage
