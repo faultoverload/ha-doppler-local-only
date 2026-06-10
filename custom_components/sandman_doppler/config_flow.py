@@ -60,7 +60,7 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): cv.string,
                     vol.Required(
-                        CONF_PORT, default=user_input.get(CONF_PORT, 80)
+                        CONF_PORT, default=user_input.get(CONF_PORT, 443)
                     ): vol.Coerce(int),
                     vol.Required(
                         CONF_LOCAL_KEY, default=user_input.get(CONF_LOCAL_KEY, "")
@@ -89,7 +89,7 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         4. Test with GET /{dsn}/hardware/volume
         """
         session = async_get_clientsession(self.hass)
-        base_url = f"http://{host}:{port}"
+        base_url = f"https://{host}:{port}"
 
         try:
             # Step 1: Fetch nonce
@@ -101,7 +101,13 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 if resp.status != 200:
                     _LOGGER.error("Nonce fetch failed: HTTP %s", resp.status)
                     return False
-                nonce = await resp.text()
+                # Handle both JSON {"nonce":"..."} and plain text responses
+                content_type = resp.headers.get("Content-Type", "")
+                if "json" in content_type:
+                    nonce_data = await resp.json()
+                    nonce = nonce_data.get("nonce", "")
+                else:
+                    nonce = await resp.text()
                 nonce = nonce.strip()
                 if not nonce:
                     _LOGGER.error("Empty nonce in response")
