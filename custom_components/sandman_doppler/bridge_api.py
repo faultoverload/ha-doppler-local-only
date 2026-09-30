@@ -20,8 +20,11 @@ SECTION_FOR_TOPIC = {
     "mode/state": "display",
     "lightbar/state": "lightbar",
     "audio/state": "audio",
+    "bluetooth/state": "bluetooth",
     "system": "system",
 }
+# pushed states that only carry part of the section: merged into the polled one
+MERGED_SECTIONS = {"display"}
 ANIMATIONS = ["off", "sweep", "pulse", "comet", "sparkle"]
 DAY_NIGHT_MODES = ["day", "night", "auto"]
 
@@ -128,6 +131,16 @@ class BridgeApi:
 
     async def clear_external_weather(self) -> dict[str, Any]:
         return await self._call("weather/external", "PUT", {"clear": True})
+
+    async def bluetooth(self, **body: Any) -> dict[str, Any]:
+        """{"pairing": bool} | {"disconnect": True} | {"forget": address} -> the bluetooth state."""
+        return await self._call("bridge/bluetooth", "PUT", body)
+
+    async def set_alarm_stream(self, alarm_id: int, url: str) -> dict[str, Any]:
+        """A stream URL the alarm plays instead of its sound ("" = the sound file)."""
+        return await self._call(
+            f"bridge/alarms/{int(alarm_id)}", "PUT", {"stream": url}
+        )
 
     async def set_digits(
         self, text: str, color: tuple[int, int, int] | None = None

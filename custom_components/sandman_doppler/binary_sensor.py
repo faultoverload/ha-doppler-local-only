@@ -64,6 +64,14 @@ BRIDGE_BINARY_SENSOR_ENTITY_DESCRIPTIONS = [
         ),
         ("audio", "playing"),
     ),
+    (
+        DopplerBinarySensorEntityDescription(
+            "Bluetooth Playing",
+            name="Bluetooth: Playing",
+            icon="mdi:bluetooth-audio",
+        ),
+        ("bluetooth", "playing"),
+    ),
 ]
 
 

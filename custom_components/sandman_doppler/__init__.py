@@ -22,7 +22,7 @@ from homeassistant.helpers.network import get_url
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .bridge_api import SECTION_FOR_TOPIC, BridgeApi
+from .bridge_api import SECTION_FOR_TOPIC, BridgeApi, MERGED_SECTIONS
 from .const import (
     ALEXA_UNIQUE_ID_SUFFIXES,
     ATTR_BRIDGE,
@@ -45,6 +45,7 @@ PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.LIGHT,
+    Platform.MEDIA_PLAYER,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
@@ -341,7 +342,11 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         bridge: dict[str, Any] = self.data[ATTR_BRIDGE]
         section = SECTION_FOR_TOPIC.get(topic)
         if section and isinstance(payload, dict):
-            bridge[section] = payload
+            if section in MERGED_SECTIONS and isinstance(bridge.get(section), dict):
+                # a pushed display state carries no "characters"/"custom_text": keep what the poll gave
+                bridge[section].update(payload)
+            else:
+                bridge[section] = payload
         elif topic == "psoc/battery" and isinstance(payload, dict):
             bridge.setdefault("psoc", {})["battery"] = payload.get("value")
         elif topic == "psoc/firmware" and isinstance(payload, dict):

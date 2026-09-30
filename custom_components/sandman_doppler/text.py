@@ -1,4 +1,4 @@
-"""Text platform: weather location and each alarm's name."""
+"""Text platform: weather location, custom digits, each alarm's name and stream URL."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
 from .alarm_entities import DopplerAlarmEntity, setup_alarm_entities
-from .const import DOMAIN
+from .const import ATTR_BRIDGE, DOMAIN
 from .entity import DopplerBridgeEntity, DopplerEntity
 
 
@@ -41,7 +41,13 @@ async def async_setup_entry(
                 )
             ]
         )
-        setup_alarm_entities(hass, entry, device, async_add_devices, [DopplerAlarmName])
+        setup_alarm_entities(
+            hass,
+            entry,
+            device,
+            async_add_devices,
+            [DopplerAlarmName, DopplerAlarmStream],
+        )
 
     entry.async_on_unload(
         async_dispatcher_connect(
@@ -79,6 +85,43 @@ class DopplerAlarmName(DopplerAlarmEntity, TextEntity):
 
     async def async_set_value(self, value: str) -> None:
         await self._save(name=value.strip() or f"Alarm {self.alarm_id}")
+
+
+class DopplerAlarmStream(DopplerAlarmEntity, TextEntity):
+    """An http(s) URL (internet radio, a podcast episode) the alarm plays instead of its sound.
+    The sound file is the fallback when the stream will not play. Open-firmware bridge only.
+    """
+
+    suffix = "stream"
+    label = "Stream URL"
+    _attr_icon = "mdi:radio"
+    _attr_native_max = 255
+    _attr_entity_category = EntityCategory.CONFIG
+
+    @property
+    def _streams(self) -> dict | None:
+        bridge = (self.coordinator.data or {}).get(ATTR_BRIDGE)
+        alarms = bridge.get("alarms") if isinstance(bridge, dict) else None
+        return alarms.get("streams") if isinstance(alarms, dict) else None
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._streams is not None
+
+    @property
+    def native_value(self) -> str | None:
+        streams = self._streams
+        return str(streams.get(str(self.alarm_id), "")) if streams is not None else None
+
+    async def async_set_value(self, value: str) -> None:
+        url = value.strip()
+        if url and not url.lower().startswith(("http://", "https://")):
+            raise ValueError("the stream must be an http(s) URL")
+        result = await self.coordinator.bridge.set_alarm_stream(self.alarm_id, url)
+        streams = self._streams
+        if streams is not None:
+            streams[str(self.alarm_id)] = result.get("stream", url)
+        self.async_write_ha_state()
 
 
 class DopplerCustomDigitsText(DopplerBridgeEntity[TextEntityDescription], TextEntity):

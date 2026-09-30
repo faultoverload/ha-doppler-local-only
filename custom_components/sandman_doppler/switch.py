@@ -105,6 +105,14 @@ BRIDGE_SWITCH_ENTITY_DESCRIPTIONS = [
         set_func=None,  # handled by DopplerDigitColonSwitch
     ),
     DopplerBridgeSwitchEntityDescription(
+        "Bluetooth Pairing",
+        name="Bluetooth: Pairing Mode",
+        icon="mdi:bluetooth-settings",
+        state_path=("bluetooth", "pairing"),
+        section="bluetooth",
+        set_func=lambda api, on: api.bluetooth(pairing=on),
+    ),
+    DopplerBridgeSwitchEntityDescription(
         "Clock Mode",
         name="Display: Clock Mode",
         icon="mdi:clock-digital",

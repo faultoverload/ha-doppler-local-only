@@ -61,12 +61,16 @@ registered its event webhook on the device, receives every state change and butt
 | sensor **Alarm State**, **Next Alarm**; buttons **Snooze Alarm**, **Dismiss Alarm** | the on-device alarm engine |
 | sensor **Weather** | value shown on the temperature display; attributes: scale, icons, condition, place |
 | binary_sensor **Audio Playing** | something is playing |
+| media_player **Speaker** | the clock as a media player: `tts.speak` targets, `media_player.play_media` with any http(s) URL or media-source item (radio, podcasts, local media), the media browser, stop, volume; also *playing* while a phone streams over Bluetooth |
+| switch **Bluetooth: Pairing Mode**, sensor **Bluetooth: Connected Device**, binary_sensor **Bluetooth: Playing**, button **Bluetooth: Disconnect** | Bluetooth speaker mode (`SANDMAN_BLUETOOTH=1` on the device): phones pair with the clock (2-minute window, blue lightbar pulse, no PIN) and play music to it |
 | diagnostics **Bridge Version**, **Bridge Uptime**, **CPU Temperature**, **Memory Used**, **PSoC Firmware** | |
 
 **Alarms from the UI**: press *Alarm: Add New* and a disabled 07:00 alarm appears with its own entities:
 *Alarm N: Enabled* (switch), *Time*, *Name*, *Sound* (the device's sound files), *Repeat* (Once / Every day /
-Weekdays / Weekends; other day sets via the `update_alarm` service show as Custom), *Volume* and *Delete*.
-Alarm colour is still set with `add_alarm`/`update_alarm`.
+Weekdays / Weekends; other day sets via the `update_alarm` service show as Custom), *Volume*, *Stream URL* and
+*Delete*. *Stream URL* makes the alarm play an internet radio station or a podcast episode (any http(s) audio
+URL) instead of its sound; the sound file takes over if the stream cannot be played. Alarm colour is still set
+with `add_alarm`/`update_alarm`.
 
 **Weather**: type a place into *Weather: Location* (city, "City, ST" or "lat,lon") and turn *Weather: Displayed*
 on for the device's own Open-Meteo fetch, or in the integration's *Configure* dialog pick one of your Home

@@ -50,6 +50,13 @@ BUTTON_ENTITY_DESCRIPTIONS = [
         press_func=lambda api: api.voice_session("start"),
         section="voice",
     ),
+    DopplerButtonEntityDescription(
+        "Bluetooth Disconnect",
+        name="Bluetooth: Disconnect",
+        icon="mdi:bluetooth-off",
+        press_func=lambda api: api.bluetooth(disconnect=True),
+        section="bluetooth",
+    ),
 ]
 
 

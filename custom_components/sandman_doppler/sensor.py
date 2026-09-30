@@ -86,6 +86,9 @@ class DopplerBridgeSensorEntityDescription(SensorEntityDescription):
     state_func: Callable[[Any], Any] = lambda x: x
     attributes_path: tuple[str, ...] | None = None  # a dict copied into the attributes
     attribute_keys: tuple[str, ...] | None = None  # only these keys of it
+    none_value: Any = (
+        None  # the state when the key is missing but its section is present
+    )
 
 
 def _next_alarm(nxt: Any) -> str | None:
@@ -145,6 +148,22 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
             "enabled",
             "fetched_at",
             "error",
+        ),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Bluetooth Device",
+        name="Bluetooth: Connected Device",
+        icon="mdi:bluetooth-audio",
+        state_path=("bluetooth", "connected_name"),
+        none_value="none",
+        attributes_path=("bluetooth",),
+        attribute_keys=(
+            "available",
+            "pairing",
+            "pairing_until",
+            "connected",
+            "paired",
+            "adapter",
         ),
     ),
     DopplerBridgeSensorEntityDescription(
@@ -250,7 +269,13 @@ class DopplerBridgeSensor(
     def native_value(self) -> Any:
         value = self.bridge_get(*self.ed.state_path)
         if value is None and self.ed.state_func is not _next_alarm:
-            return None
+            # a missing key inside a present section (e.g. no phone connected) still has a state
+            if (
+                self.ed.none_value is None
+                or self.bridge_get(self.ed.state_path[0]) is None
+            ):
+                return None
+            return self.ed.none_value
         return self.ed.state_func(value)
 
     @property
