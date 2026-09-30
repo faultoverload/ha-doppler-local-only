@@ -21,8 +21,9 @@ from homeassistant.helpers.network import get_url
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_LOCAL_KEY, CONF_DSN
-from .http import DopplerWebhookView
+from .bridge_api import SECTION_FOR_TOPIC, BridgeApi
+from .const import ATTR_BRIDGE, DOMAIN, CONF_HOST, CONF_PORT, CONF_LOCAL_KEY, CONF_DSN
+from .http import DopplerEventView, DopplerWebhookView
 from .services import DopplerServices
 
 SCAN_INTERVAL = timedelta(seconds=60)
@@ -31,6 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.LIGHT,
     Platform.NUMBER,
     Platform.SELECT,
@@ -43,6 +45,7 @@ PLATFORMS = [
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Sandman Doppler component."""
     hass.http.register_view(DopplerWebhookView())
+    hass.http.register_view(DopplerEventView())
     return True
 
 
@@ -60,9 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Create a minimal DopplerClient (no cloud auth) — needed only as HTTP
     # transport for Doppler._call_local_api() which uses client.request()
-    client = DopplerClient(
-        "", "", client_session=session, local_api_semaphore_limit=1
-    )
+    client = DopplerClient("", "", client_session=session, local_api_semaphore_limit=1)
 
     dev_reg = dr.async_get(hass)
     ent_reg = er.async_get(hass)
@@ -162,8 +163,11 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.data: dict[str, Any] = {}
         self.api = client
         self.doppler = doppler
+        self.bridge = BridgeApi(doppler)
+        self.device_entry = device_entry
         self._entry = entry
         self._entities_created = False
+        self._bridge_seen: bool | None = None
         base_url = get_url(
             self.hass,
             require_ssl=False,
@@ -178,6 +182,7 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._webhook_url = (
             f"{base_url}/api/sandman_doppler/smart_button/{device_entry.id}"
         )
+        self._event_url = f"{base_url}/api/sandman_doppler/event/{device_entry.id}"
 
     async def _reschedule_refresh(self) -> None:
         """Reschedule refresh due to failure."""
@@ -192,6 +197,7 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         try:
             data = await self.doppler.get_all_data()
+            data[ATTR_BRIDGE] = await self.bridge.get_state()
         except DopplerException as exc:
             _LOGGER.debug(
                 "Exception received during update for device %s (%s): %s: %s",
@@ -209,6 +215,28 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.doppler.name,
                 self.doppler.dsn,
             )
+        bridge = data.get(ATTR_BRIDGE)
+        if bridge is not None and self._bridge_seen is not True:
+            # Open-firmware bridge: get pushed events, and show its version on the device
+            self._bridge_seen = True
+            try:
+                await self.bridge.set_webhook(self._event_url)
+            except DopplerException as exc:
+                _LOGGER.warning(
+                    "Could not register the event webhook on %s: %s",
+                    self.doppler.dsn,
+                    exc,
+                )
+            if bridge.get("software"):
+                dr.async_get(self.hass).async_update_device(
+                    self.device_entry.id, sw_version=bridge["software"]
+                )
+        elif bridge is None and self._bridge_seen is None:
+            self._bridge_seen = False
+            _LOGGER.info(
+                "%s runs the stock firmware (no /bridge endpoint): bridge entities stay unavailable",
+                self.doppler.dsn,
+            )
         if not self.data:
             self._entities_created = True
             await asyncio.gather(
@@ -223,3 +251,22 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.hass, f"{DOMAIN}_{self._entry.entry_id}_device_added", self.doppler
             )
         return data
+
+    @callback
+    def apply_bridge_update(self, topic: str, payload: Any) -> None:
+        """A pushed state from the bridge's event webhook (DopplerEventView)."""
+        if not self.data or self.data.get(ATTR_BRIDGE) is None:
+            return
+        bridge: dict[str, Any] = self.data[ATTR_BRIDGE]
+        section = SECTION_FOR_TOPIC.get(topic)
+        if section and isinstance(payload, dict):
+            bridge[section] = payload
+        elif topic == "psoc/battery" and isinstance(payload, dict):
+            bridge.setdefault("psoc", {})["battery"] = payload.get("value")
+        elif topic == "psoc/firmware" and isinstance(payload, dict):
+            bridge.setdefault("psoc", {})["firmware"] = payload.get("version")
+        elif topic == "sensors/light" and isinstance(payload, dict):
+            bridge.setdefault("psoc", {})["light"] = payload.get("value")
+        else:
+            return
+        self.async_set_updated_data(self.data)

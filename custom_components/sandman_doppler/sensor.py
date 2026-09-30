@@ -17,7 +17,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import EntityCategory
@@ -26,7 +26,7 @@ from homeassistant.util import dt as dt_util
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
-from .entity import DopplerEntity
+from .entity import DopplerBridgeEntity, DopplerEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,6 +86,127 @@ SENSOR_ENTITY_DESCRIPTIONS = [
 ]
 
 
+@dataclass
+class DopplerBridgeSensorEntityDescription(SensorEntityDescription):
+    """A sensor from GET /<dsn>/bridge (open firmware only)."""
+
+    state_path: tuple[str, ...] = ()
+    state_func: Callable[[Any], Any] = lambda x: x
+    attributes_path: tuple[str, ...] | None = None  # a dict copied into the attributes
+    attribute_keys: tuple[str, ...] | None = None  # only these keys of it
+
+
+def _next_alarm(nxt: Any) -> str | None:
+    if not isinstance(nxt, dict):
+        return "none"
+    text = f"{int(nxt.get('hour', 0)):02d}:{int(nxt.get('minute', 0)):02d}"
+    days = int(nxt.get("days", 0) or 0)
+    return f"{text} +{days}d" if days else text
+
+
+BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
+    DopplerBridgeSensorEntityDescription(
+        "Voice Assistant",
+        name="Voice Assistant",
+        icon="mdi:account-voice",
+        state_path=("voice", "state"),
+        attributes_path=("voice",),
+        attribute_keys=(
+            "muted",
+            "pipeline",
+            "reason",
+            "wake_word",
+            "text",
+            "response",
+            "satellite",
+        ),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Alarm State",
+        name="Alarm State",
+        icon="mdi:alarm",
+        state_path=("alarms", "state"),
+        attributes_path=("alarms",),
+        attribute_keys=("alarm", "snooze_until", "armed", "count"),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Next Alarm",
+        name="Next Alarm",
+        icon="mdi:alarm-check",
+        state_path=("alarms", "next"),
+        state_func=_next_alarm,
+        attributes_path=("alarms", "next"),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Weather",
+        name="Weather",
+        icon="mdi:weather-partly-cloudy",
+        state_path=("weather", "value"),
+        attributes_path=("weather",),
+        attribute_keys=(
+            "scale",
+            "icons",
+            "condition",
+            "place",
+            "location",
+            "mode",
+            "enabled",
+            "fetched_at",
+            "error",
+        ),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Bridge Version",
+        name="Bridge Version",
+        icon="mdi:source-branch",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_path=("software",),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Bridge Uptime",
+        name="Bridge Uptime",
+        icon="mdi:timer-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_path=("system", "uptime_s"),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "CPU Temperature",
+        name="CPU Temperature",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        state_path=("system", "cpu_temp_c"),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "Memory Used",
+        name="Memory Used",
+        icon="mdi:memory",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        state_path=("system", "mem_used_pct"),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "PSoC Battery",
+        name="PSoC Battery",
+        icon="mdi:battery",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_path=("psoc", "battery"),
+    ),
+    DopplerBridgeSensorEntityDescription(
+        "PSoC Firmware",
+        name="PSoC Firmware",
+        icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_path=("psoc", "firmware"),
+    ),
+]
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_devices: AddEntitiesCallback
 ) -> None:
@@ -101,6 +222,10 @@ async def async_setup_entry(
             DopplerSensor(coordinator, entry, device, description)
             for description in SENSOR_ENTITY_DESCRIPTIONS
         ]
+        entities.extend(
+            DopplerBridgeSensor(coordinator, entry, device, description)
+            for description in BRIDGE_SENSOR_ENTITY_DESCRIPTIONS
+        )
         async_add_devices(entities)
 
     entry.async_on_unload(
@@ -131,13 +256,24 @@ class DopplerSensor(DopplerEntity[DopplerSensorEntityDescription], SensorEntity)
         return self.ed.state_func(raw_value)
 
 
-# class DopplerAlarmsSensor(DopplerEntity,SensorEntity):
-#     """Doppler Alarms Sensor class."""
+class DopplerBridgeSensor(
+    DopplerBridgeEntity[DopplerBridgeSensorEntityDescription], SensorEntity
+):
+    """A sensor from the bridge state."""
 
-#     _attr_state_class = SensorStateClass.MEASUREMENT
+    @property
+    def native_value(self) -> Any:
+        value = self.bridge_get(*self.ed.state_path)
+        if value is None and self.ed.state_func is not _next_alarm:
+            return None
+        return self.ed.state_func(value)
 
-#     @property
-#     def native_value(self) -> list[dict[str, Any]]:
-#         """Return the native value of the sensor."""
-#         mylist =[Alarm.to_dict(alarm) for alarm in self.device_data[ATTR_ALARMS]]
-#         return mylist
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if not self.ed.attributes_path:
+            return None
+        node = self.bridge_get(*self.ed.attributes_path)
+        if not isinstance(node, dict):
+            return None
+        keys = self.ed.attribute_keys or tuple(node)
+        return {k: node[k] for k in keys if k in node}

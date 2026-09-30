@@ -44,7 +44,7 @@ from homeassistant.util import slugify
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
-from .entity import DopplerEntity
+from .entity import DopplerBridgeEntity, DopplerEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -180,6 +180,16 @@ async def async_setup_entry(
                 DopplerSmartButtonLight(coordinator, entry, device, description)
                 for description in SMART_BUTTON_LIGHT_ENTITY_DESCRIPTIONS
             ]
+        )
+        entities.append(
+            DopplerLightbar(
+                coordinator,
+                entry,
+                device,
+                DopplerLightEntityDescription(
+                    "Lightbar", name="Lightbar", icon="mdi:led-strip-variant"
+                ),
+            )
         )
         async_add_devices(entities)
 
@@ -363,3 +373,43 @@ class DopplerSmartButtonLight(BaseDopplerLight):
         if (rgb_color := kwargs.get(ATTR_RGB_COLOR)) is not None:
             await self._async_set_rgb_color(rgb_color)
             self.async_write_ha_state()
+
+
+class DopplerLightbar(DopplerBridgeEntity[DopplerLightEntityDescription], LightEntity):
+    """The 29-LED lightbar through the bridge (HA json-light semantics)."""
+
+    _attr_color_mode = ColorMode.RGB
+    _attr_supported_color_modes = {ColorMode.RGB}
+
+    @property
+    def is_on(self) -> bool | None:
+        state = self.bridge_get("lightbar", "state")
+        return None if state is None else str(state).upper() == "ON"
+
+    @property
+    def brightness(self) -> int | None:
+        value = self.bridge_get("lightbar", "brightness")
+        return None if value is None else int(value)
+
+    @property
+    def rgb_color(self) -> tuple[int, int, int] | None:
+        color = self.bridge_get("lightbar", "color")
+        if not isinstance(color, dict):
+            return None
+        return (int(color.get("r", 0)), int(color.get("g", 0)), int(color.get("b", 0)))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        animation = self.bridge_get("lightbar", "animation")
+        return {"animation": animation} if animation is not None else None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        result = await self.bridge.set_lightbar(
+            "ON",
+            color=kwargs.get(ATTR_RGB_COLOR),
+            brightness=kwargs.get(ATTR_BRIGHTNESS),
+        )
+        self.bridge_set("lightbar", result)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self.bridge_set("lightbar", await self.bridge.set_lightbar("OFF"))

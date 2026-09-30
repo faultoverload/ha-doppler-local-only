@@ -1,0 +1,107 @@
+"""Calls to the open-firmware bridge's local API (faultoverload/sandman-doppler).
+
+The stock endpoints are covered by doppyler; these are the bridge's own:
+GET /<dsn>/bridge (everything in one call), the bridge/* controls, voice/*,
+alarms/snooze|dismiss|ring and hardware/day-mode with a mode. They go through
+the same nonce/HMAC session doppyler keeps for the device.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from doppyler.exceptions import DopplerException, UnknownException
+from doppyler.model.doppler import Doppler
+
+SECTION_FOR_TOPIC = {
+    "voice/state": "voice",
+    "alarms/state": "alarms",
+    "weather/state": "weather",
+    "mode/state": "display",
+    "lightbar/state": "lightbar",
+    "audio/state": "audio",
+    "system": "system",
+}
+ANIMATIONS = ["off", "sweep", "pulse", "comet", "sparkle"]
+DAY_NIGHT_MODES = ["day", "night", "auto"]
+
+
+class BridgeApi:
+    """Thin async wrapper over the bridge endpoints for one Doppler."""
+
+    def __init__(self, doppler: Doppler) -> None:
+        self._doppler = doppler
+
+    async def _call(
+        self, endpoint: str, method: str = "GET", data: dict | None = None
+    ) -> Any:
+        return await self._doppler._call_local_api(endpoint, method=method, data=data)
+
+    async def get_state(self) -> dict[str, Any] | None:
+        """The aggregated state, or None when the device is not running the bridge."""
+        try:
+            return await self._call("bridge")
+        except UnknownException:
+            return None  # stock firmware / older bridge: 404
+
+    async def set_webhook(self, url: str) -> dict[str, Any]:
+        return await self._call("bridge/webhook", "PUT", {"url": url})
+
+    # display
+    async def set_clock(self, enabled: bool) -> dict[str, Any]:
+        return await self._call("bridge/clock", "PUT", {"enabled": bool(enabled)})
+
+    async def set_day_night_mode(self, mode: str) -> dict[str, Any]:
+        return await self._call("hardware/day-mode", "PUT", {"mode": mode})
+
+    async def set_lightbar(
+        self,
+        state: str,
+        color: tuple[int, int, int] | None = None,
+        brightness: int | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"state": state}
+        if color is not None:
+            body["color"] = {"r": color[0], "g": color[1], "b": color[2]}
+        if brightness is not None:
+            body["brightness"] = int(brightness)
+        return await self._call("bridge/lightbar", "PUT", body)
+
+    async def set_animation(self, name: str) -> dict[str, Any]:
+        return await self._call("bridge/animation", "PUT", {"name": name})
+
+    async def audio(self, **body: Any) -> dict[str, Any]:
+        return await self._call("bridge/audio", "PUT", body)
+
+    # voice
+    async def voice_settings(self, **changes: Any) -> dict[str, Any]:
+        return await self._call("voice/settings", "PUT", changes)
+
+    async def voice_session(self, action: str) -> dict[str, Any]:
+        return await self._call("voice/session", "POST", {"action": action})
+
+    async def voice_say(
+        self, url: str | None = None, path: str | None = None, volume: int | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if url:
+            body["url"] = url
+        if path:
+            body["path"] = path
+        if volume is not None:
+            body["volume"] = int(volume)
+        return await self._call("voice/tts", "POST", body)
+
+    # alarms
+    async def alarm_snooze(self, minutes: int | None = None) -> dict[str, Any]:
+        return await self._call(
+            "alarms/snooze", "POST", {"minutes": minutes} if minutes else {}
+        )
+
+    async def alarm_dismiss(self) -> dict[str, Any]:
+        return await self._call("alarms/dismiss", "POST", {})
+
+    async def alarm_ring(self, alarm_id: int | None = None) -> dict[str, Any]:
+        return await self._call(
+            "alarms/ring", "POST", {"id": alarm_id} if alarm_id is not None else {}
+        )

@@ -1,11 +1,15 @@
 {
   "domain": "sandman_doppler",
   "name": "Sandman Doppler",
-  "codeowners": ["@raman325"],
+  "codeowners": [
+    "@raman325"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/faultoverload/ha-doppler-local-only",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/faultoverload/ha-doppler-local-only/issues",
-  "requirements": ["doppyler==0.0.20"],
-  "version": "1.0.0-local"
+  "requirements": [
+    "doppyler==0.0.20"
+  ],
+  "version": "1.1.0-local"
 }

@@ -58,7 +58,9 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): cv.string,
+                    vol.Required(
+                        CONF_HOST, default=user_input.get(CONF_HOST, "")
+                    ): cv.string,
                     vol.Required(
                         CONF_PORT, default=user_input.get(CONF_PORT, 443)
                     ): vol.Coerce(int),
@@ -135,13 +137,17 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
             _LOGGER.info(
                 "Successfully connected to Doppler %s at %s:%s",
-                dsn, host, port,
+                dsn,
+                host,
+                port,
             )
             return True
 
         except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError) as exc:
             _LOGGER.debug(
                 "Connection to Doppler at %s:%s failed: %s",
-                host, port, exc,
+                host,
+                port,
+                exc,
             )
             return False

@@ -32,3 +32,19 @@ SERVICE_ACTIVATE_LIGHT_BAR_PULSE = "activate_light_bar_pulse"
 SERVICE_ACTIVATE_LIGHT_BAR_SET = "activate_light_bar_set"
 SERVICE_ACTIVATE_LIGHT_BAR_SET_EACH = "activate_light_bar_set_each"
 SERVICE_ACTIVATE_LIGHT_BAR_SWEEP = "activate_light_bar_sweep"
+
+# Bridge (open firmware) data in the coordinator: coordinator.data[ATTR_BRIDGE] is GET /<dsn>/bridge
+ATTR_BRIDGE = "bridge"
+ATTR_TOPIC = "topic"
+ATTR_DATA = "data"
+
+EVENT_BUTTON_EVENT = (
+    f"{DOMAIN}_button_event"  # every press/release/hold/repeat/long_press
+)
+EVENT_ALARM_EVENT = f"{DOMAIN}_alarm_event"  # ring / snooze / dismiss / timeout
+EVENT_VOICE_REQUEST = f"{DOMAIN}_voice_request"  # MIC button asked for a session
+
+SERVICE_VOICE_SAY = "voice_say"
+SERVICE_ALARM_SNOOZE = "alarm_snooze"
+SERVICE_ALARM_DISMISS = "alarm_dismiss"
+SERVICE_ALARM_RING = "alarm_ring"

@@ -39,6 +39,40 @@ To install this integration into your Home Assistant we are recommending your us
 7. Restart Home Assistant.
 8. In the HA UI go to "Configuration" -> "Integrations" click "+" and search for "Sandman Doppler".
 
+## Open-firmware bridge entities (sandman-doppler)
+
+With the Doppler running the [open-firmware bridge](https://github.com/faultoverload/sandman-doppler)
+(`sandman-bridge` v16 or later) the integration reads `GET /<dsn>/bridge` on every poll and, once it has
+registered its event webhook on the device, receives every state change and button event as it happens
+(`iot_class: local_push`, no MQTT broker anywhere). Extra entities, unavailable on the stock firmware:
+
+| Entity | What |
+|---|---|
+| light **Lightbar** | the 29-LED bar: on/off, RGB, brightness; `animation` attribute |
+| select **Lightbar Animation** | off / sweep / pulse / comet / sparkle |
+| switch **Clock Mode** | the bridge keeps the time on the digits |
+| select **Day/Night Selection** | day / night / auto (light-sensor thresholds are the transition numbers) |
+| sensor **Voice Assistant** | unavailable / idle / listening / processing / responding / error; attributes: muted, pipeline, wake word, transcript |
+| switch **Microphone Mute**, **Voice: Tap to Talk Tone**, **Voice: Wake Word Tone** | replace the Alexa switches |
+| button **Start Listening** | start an Assist session (like the MIC button) |
+| binary_sensor **Voice Satellite** | HA's Wyoming integration is connected to the device (port 10700) |
+| sensor **Alarm State**, **Next Alarm**; buttons **Snooze Alarm**, **Dismiss Alarm** | the on-device alarm engine |
+| sensor **Weather** | value shown on the temperature display; attributes: scale, icons, condition, place |
+| binary_sensor **Audio Playing** | something is playing |
+| diagnostics **Bridge Version**, **Bridge Uptime**, **CPU Temperature**, **Memory Used**, **PSoC Battery**, **PSoC Firmware** | |
+
+Services: `sandman_doppler.voice_say` (play a TTS URL or a file on the device), `alarm_snooze`,
+`alarm_dismiss`, `alarm_ring`. Events on the HA bus: `sandman_doppler_button_event` (every press /
+release / hold / repeat / long_press of every button, with `button`, `event`, `held`, `count`,
+`duration_ms`), `sandman_doppler_alarm_event` (ring / snooze / dismiss / timeout), `sandman_doppler_voice_request`
+(the MIC button asked for a session). The stock `sandman_doppler_button_pressed` event for the two smart buttons is unchanged.
+
+The Alexa entities (connected sensor, ascending alarms, tap-to-talk and wake-word tone switches) were removed:
+there is no Alexa on the open firmware, and the device answers those endpoints with "off".
+
+The voice pipeline itself is Home Assistant's **Wyoming Protocol** integration pointed at the Doppler's IP,
+port 10700 (the bridge runs a Wyoming satellite); this integration shows its state and settings.
+
 ## Prerequisites: Finding Your Device Details
 
 This local-only fork needs four values to connect: the device's **IP address**, **port** (typically 443 or 5443), **DSN** (serial number), and **local key**. The first two are easy, the last two require extraction from the Sandman Clocks Android app.

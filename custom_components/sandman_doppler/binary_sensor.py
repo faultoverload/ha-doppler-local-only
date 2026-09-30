@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import logging
 
-from doppyler.const import ATTR_CONNECTED_TO_ALEXA, ATTR_IS_IN_DAY_MODE
+from doppyler.const import ATTR_IS_IN_DAY_MODE
 from doppyler.model.doppler import Doppler
 
 from homeassistant.components.binary_sensor import (
@@ -22,7 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
-from .entity import DopplerEntity
+from .entity import DopplerBridgeEntity, DopplerEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,12 +43,26 @@ BINARY_SENSOR_ENTITY_DESCRIPTIONS = [
         state_key=ATTR_IS_IN_DAY_MODE,
         icon_lambda=lambda x: "mdi:weather-sunny" if x else "mdi:weather-night",
     ),
-    DopplerBinarySensorEntityDescription(
-        "Alexa",
-        name="Alexa",
-        device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        state_key=ATTR_CONNECTED_TO_ALEXA,
+]
+
+# Open-firmware bridge (faultoverload/sandman-doppler): path into GET /<dsn>/bridge
+BRIDGE_BINARY_SENSOR_ENTITY_DESCRIPTIONS = [
+    (
+        DopplerBinarySensorEntityDescription(
+            "Voice Satellite",
+            name="Voice Satellite",
+            device_class=BinarySensorDeviceClass.CONNECTIVITY,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        ("voice", "satellite", "connected"),
+    ),
+    (
+        DopplerBinarySensorEntityDescription(
+            "Audio Playing",
+            name="Audio Playing",
+            icon="mdi:speaker",
+        ),
+        ("audio", "playing"),
     ),
 ]
 
@@ -68,6 +82,10 @@ async def async_setup_entry(
             DopplerBinarySensor(coordinator, entry, device, description)
             for description in BINARY_SENSOR_ENTITY_DESCRIPTIONS
         ]
+        entities.extend(
+            DopplerBridgeBinarySensor(coordinator, entry, device, description, path)
+            for description, path in BRIDGE_BINARY_SENSOR_ENTITY_DESCRIPTIONS
+        )
         async_add_devices(entities)
 
     entry.async_on_unload(
@@ -85,9 +103,16 @@ class DopplerBinarySensor(
     @property
     def is_on(self) -> bool | None:
         """Return the state of the sensor."""
+        if self.ed.state_key == ATTR_IS_IN_DAY_MODE:
+            bridge = (self.device_data or {}).get("bridge")
+            if isinstance(bridge, dict) and isinstance(bridge.get("display"), dict):
+                return bool(bridge["display"].get("day", True))
         if self.ed.state_key is None:
             return None
-        return self.device_data.get(self.ed.state_key)
+        value = self.device_data.get(self.ed.state_key)
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "on", "yes")
+        return value
 
     @property
     def icon(self) -> str | None:
@@ -95,3 +120,18 @@ class DopplerBinarySensor(
         if self.ed.icon_lambda and self.is_on is not None:
             return self.ed.icon_lambda(self.is_on)
         return super().icon
+
+
+class DopplerBridgeBinarySensor(
+    DopplerBridgeEntity[DopplerBinarySensorEntityDescription], BinarySensorEntity
+):
+    """A binary sensor from the bridge state."""
+
+    def __init__(self, coordinator, config_entry, device, description, path):
+        super().__init__(coordinator, config_entry, device, description)
+        self._path = path
+
+    @property
+    def is_on(self) -> bool | None:
+        value = self.bridge_get(*self._path)
+        return None if value is None else bool(value)

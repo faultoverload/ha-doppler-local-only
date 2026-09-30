@@ -1,3 +1,94 @@
+voice_say:
+  name: Voice: say (play TTS clip)
+  description: Plays a WAV/MP3 clip through the Doppler's speaker (the open-firmware bridge). Give a URL Home Assistant's TTS produced (e.g. from tts.speak's media_content_id or a media URL) or a file path on the device.
+  fields:
+    device_id:
+      name: Device
+      description: The Sandman Doppler device to target
+      required: true
+      selector:
+        device:
+          integration: sandman_doppler
+          multiple: true
+    url:
+      name: URL
+      description: http(s) URL of the clip; the device downloads and plays it
+      required: false
+      selector:
+        text:
+    path:
+      name: Path
+      description: Absolute path of a file on the device, or a stock sound name (e.g. Gentle)
+      required: false
+      selector:
+        text:
+    volume:
+      name: Volume
+      description: Playback volume 0-100 (default: the current volume)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: slider
+
+alarm_snooze:
+  name: Snooze the ringing alarm
+  description: Snoozes the alarm that is ringing on the Doppler (open-firmware bridge).
+  fields:
+    device_id:
+      name: Device
+      description: The Sandman Doppler device to target
+      required: true
+      selector:
+        device:
+          integration: sandman_doppler
+          multiple: true
+    minutes:
+      name: Minutes
+      description: Snooze length (default 9)
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 120
+          mode: box
+
+alarm_dismiss:
+  name: Dismiss the alarm
+  description: Stops the ringing or snoozed alarm on the Doppler (open-firmware bridge).
+  fields:
+    device_id:
+      name: Device
+      description: The Sandman Doppler device to target
+      required: true
+      selector:
+        device:
+          integration: sandman_doppler
+          multiple: true
+
+alarm_ring:
+  name: Ring an alarm now
+  description: Rings one of the stored alarms immediately, to test it (open-firmware bridge).
+  fields:
+    device_id:
+      name: Device
+      description: The Sandman Doppler device to target
+      required: true
+      selector:
+        device:
+          integration: sandman_doppler
+          multiple: true
+    id:
+      name: Alarm ID
+      description: The alarm to ring (default: the first one)
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 255
+          mode: box
+
 set_weather_location:
   name: Set weather location
   description: Sets the location that weather is retrieved for. To control other weather settings, use the available weather entities.

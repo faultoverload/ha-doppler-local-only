@@ -27,7 +27,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
-from .entity import DopplerEntity
+from .bridge_api import ANIMATIONS, DAY_NIGHT_MODES
+from .entity import DopplerBridgeEntity, DopplerEntity
 from .helpers import get_enum_from_name, normalize_enum_name
 
 
@@ -73,6 +74,48 @@ ENUM_SELECT_ENTITY_DESCRIPTIONS = [
     ),
 ]
 
+
+@dataclass
+class DopplerBridgeSelectEntityDescription(SelectEntityDescription):
+    """A select on the bridge's own API (open firmware only)."""
+
+    state_path: tuple[str, ...] = ()
+    section: str = ""
+    options_list: list[str] | None = None
+    set_func: Callable[[Any, str], Coroutine[Any, Any, dict]] | None = None
+    result_func: Callable[[dict], dict] = (
+        lambda x: x
+    )  # shape the answer like the section
+    entity_category: EntityCategory | None = None
+
+
+BRIDGE_SELECT_ENTITY_DESCRIPTIONS = [
+    DopplerBridgeSelectEntityDescription(
+        "Day/Night Selection",
+        name="Day/Night Selection",
+        icon="mdi:theme-light-dark",
+        entity_category=EntityCategory.CONFIG,
+        state_path=("display", "day_night_mode"),
+        section="display",
+        options_list=DAY_NIGHT_MODES,
+        set_func=lambda api, val: api.set_day_night_mode(val),
+        result_func=lambda r: {
+            "day_night_mode": r.get("mode"),
+            "day": str(r.get("isDayMode")).lower() == "true",
+        },
+    ),
+    DopplerBridgeSelectEntityDescription(
+        "Lightbar Animation",
+        name="Lightbar Animation",
+        icon="mdi:animation-play",
+        state_path=("lightbar", "animation"),
+        section="lightbar",
+        options_list=ANIMATIONS,
+        set_func=lambda api, val: api.set_animation(val),
+    ),
+]
+
+
 SELECT_ENTITY_DESCRIPTIONS = [
     DopplerSelectEntityDescription(
         "Time Mode",
@@ -115,6 +158,10 @@ async def async_setup_entry(
                 DopplerEnumSelect(coordinator, entry, device, description)
                 for description in ENUM_SELECT_ENTITY_DESCRIPTIONS
             )
+        )
+        entities.extend(
+            DopplerBridgeSelect(coordinator, entry, device, description)
+            for description in BRIDGE_SELECT_ENTITY_DESCRIPTIONS
         )
         async_add_devices(entities)
 
@@ -178,3 +225,32 @@ class DopplerSelect(DopplerEntity[DopplerSelectEntityDescription], SelectEntity)
             self.device, option
         )
         self.async_write_ha_state()
+
+
+class DopplerBridgeSelect(
+    DopplerBridgeEntity[DopplerBridgeSelectEntityDescription], SelectEntity
+):
+    """Day/night mode and lightbar animation, on the bridge's API."""
+
+    @property
+    def entity_category(self) -> EntityCategory | None:
+        return self.ed.entity_category
+
+    @property
+    def options(self) -> list[str]:
+        return list(self.ed.options_list or [])
+
+    @property
+    def current_option(self) -> str | None:
+        value = self.bridge_get(*self.ed.state_path)
+        if value is None:
+            return None
+        value = str(value)
+        return value if value in self.options else None
+
+    async def async_select_option(self, option: str) -> None:
+        result = await self.ed.set_func(self.bridge, option)
+        self.bridge_set(
+            self.ed.section,
+            self.ed.result_func(result) if isinstance(result, dict) else None,
+        )

@@ -9,9 +9,6 @@ import logging
 from typing import Any
 
 from doppyler.const import (
-    ATTR_ALEXA_TAP_TO_TALK_TONE_ENABLED,
-    ATTR_ALEXA_USE_ASCENDING_ALARMS,
-    ATTR_ALEXA_WAKE_WORD_TONE_ENABLED,
     ATTR_COLON_BLINK,
     ATTR_DISPLAY_SECONDS,
     ATTR_SOUND_PRESET_MODE,
@@ -44,7 +41,7 @@ from homeassistant.util import slugify
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
-from .entity import DopplerEntity
+from .entity import DopplerBridgeEntity, DopplerEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +54,57 @@ class DopplerSwitchEntityDescription(SwitchEntityDescription):
     state_func: Callable[[Any], Any] = lambda x: x
     set_value_func: Callable[[Doppler, bool], Coroutine[Any, Any, bool]] = None
     set_value_func_name: str | None = None
+    bridge_state_path: tuple[str, ...] | None = (
+        None  # prefer this value from GET /<dsn>/bridge when present
+    )
+
+
+@dataclass
+class DopplerBridgeSwitchEntityDescription(SwitchEntityDescription):
+    """A switch on the bridge's own API (open firmware only)."""
+
+    state_path: tuple[str, ...] = ()
+    section: str = ""
+    set_func: Callable[[Any, bool], Coroutine[Any, Any, dict]] | None = None
+    entity_category: EntityCategory | None = None
+
+
+BRIDGE_SWITCH_ENTITY_DESCRIPTIONS = [
+    DopplerBridgeSwitchEntityDescription(
+        "Microphone Mute",
+        name="Microphone Mute",
+        icon="mdi:microphone-off",
+        state_path=("voice", "muted"),
+        section="voice",
+        set_func=lambda api, on: api.voice_settings(muted=on),
+    ),
+    DopplerBridgeSwitchEntityDescription(
+        "Voice: Tap to Talk Tone",
+        name="Voice: Tap to Talk Tone",
+        icon="mdi:music-note",
+        entity_category=EntityCategory.CONFIG,
+        state_path=("voice", "tap_to_talk_tone"),
+        section="voice",
+        set_func=lambda api, on: api.voice_settings(tap_to_talk_tone=on),
+    ),
+    DopplerBridgeSwitchEntityDescription(
+        "Voice: Wake Word Tone",
+        name="Voice: Wake Word Tone",
+        icon="mdi:music-note-eighth",
+        entity_category=EntityCategory.CONFIG,
+        state_path=("voice", "wake_word_tone"),
+        section="voice",
+        set_func=lambda api, on: api.voice_settings(wake_word_tone=on),
+    ),
+    DopplerBridgeSwitchEntityDescription(
+        "Clock Mode",
+        name="Clock Mode",
+        icon="mdi:clock-digital",
+        state_path=("display", "clock"),
+        section="display",
+        set_func=lambda api, on: api.set_clock(on),
+    ),
+]
 
 
 ENTITY_DESCRIPTIONS = [
@@ -77,6 +125,8 @@ ENTITY_DESCRIPTIONS = [
         name="Fade Time Between Changes",
         state_key=ATTR_USE_FADE_TIME,
         set_value_func_name="set_use_fade_time",
+        # doppyler 0.0.20's get_use_fade_time() reads use-leading-zero; the bridge reports the real value
+        bridge_state_path=("settings", "use_fade_time"),
     ),
     DopplerSwitchEntityDescription(
         "Use Leading Zero",
@@ -90,25 +140,8 @@ ENTITY_DESCRIPTIONS = [
         state_key=ATTR_DISPLAY_SECONDS,
         set_value_func_name="set_display_seconds_mode",
     ),
-    # Note that while this is under Alexa in the api it's really not an Alexa function
-    DopplerSwitchEntityDescription(
-        "Ascending Alarms",
-        name="Ascending Alarms",
-        state_key=ATTR_ALEXA_USE_ASCENDING_ALARMS,
-        set_value_func_name="set_alexa_ascending_alarms_mode",
-    ),
-    DopplerSwitchEntityDescription(
-        "Alexa: Tap to Talk Tone",
-        name="Alexa: Tap to Talk Tone",
-        state_key=ATTR_ALEXA_TAP_TO_TALK_TONE_ENABLED,
-        set_value_func_name="set_alexa_tap_to_talk_tone_enabled",
-    ),
-    DopplerSwitchEntityDescription(
-        "Alexa: Wake Word Tone",
-        name="Alexa: Wake Word Tone",
-        state_key=ATTR_ALEXA_WAKE_WORD_TONE_ENABLED,
-        set_value_func_name="set_alexa_wake_word_tone_enabled",
-    ),
+    # The Alexa switches (ascending alarms, tap-to-talk tone, wake-word tone) are gone:
+    # there is no Alexa on the open firmware; the voice switches below replace the tones.
     DopplerSwitchEntityDescription(
         "Volume Dependent EQ",
         name="Volume Dependent EQ",
@@ -164,6 +197,10 @@ async def async_setup_entry(
                 for alarm in device.alarms.values()
             ]
         )
+        entities.extend(
+            DopplerBridgeSwitch(coordinator, entry, device, description)
+            for description in BRIDGE_SWITCH_ENTITY_DESCRIPTIONS
+        )
         async_add_devices(entities)
 
         entry.async_on_unload(
@@ -197,6 +234,12 @@ class DopplerSwitch(DopplerEntity[DopplerSwitchEntityDescription], SwitchEntity)
     @property
     def is_on(self) -> bool | None:
         """Return true if switch is on."""
+        if self.ed.bridge_state_path:
+            node: Any = (self.device_data or {}).get("bridge")
+            for key in self.ed.bridge_state_path:
+                node = node.get(key) if isinstance(node, dict) else None
+            if node is not None:
+                return bool(node)
         if self.ed.state_key is None:
             return None
         raw_value = self.device_data.get(self.ed.state_key)
@@ -211,8 +254,7 @@ class DopplerSwitch(DopplerEntity[DopplerSwitchEntityDescription], SwitchEntity)
         else:
             new_val = await getattr(self.device, self.ed.set_value_func_name)(True)
 
-        self.device_data[self.ed.state_key] = new_val
-        self.async_write_ha_state()
+        self._store(new_val)
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the switch off."""
@@ -221,8 +263,40 @@ class DopplerSwitch(DopplerEntity[DopplerSwitchEntityDescription], SwitchEntity)
         else:
             new_val = await getattr(self.device, self.ed.set_value_func_name)(False)
 
+        self._store(new_val)
+
+    def _store(self, new_val: Any) -> None:
         self.device_data[self.ed.state_key] = new_val
+        if self.ed.bridge_state_path:
+            node: Any = (self.device_data or {}).get("bridge")
+            for key in self.ed.bridge_state_path[:-1]:
+                node = node.get(key) if isinstance(node, dict) else None
+            if isinstance(node, dict):
+                node[self.ed.bridge_state_path[-1]] = new_val
         self.async_write_ha_state()
+
+
+class DopplerBridgeSwitch(
+    DopplerBridgeEntity[DopplerBridgeSwitchEntityDescription], SwitchEntity
+):
+    """Voice mute/tones and clock mode, on the bridge's API."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+
+    @property
+    def entity_category(self) -> EntityCategory | None:
+        return self.ed.entity_category
+
+    @property
+    def is_on(self) -> bool | None:
+        value = self.bridge_get(*self.ed.state_path)
+        return None if value is None else bool(value)
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self.bridge_set(self.ed.section, await self.ed.set_func(self.bridge, True))
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self.bridge_set(self.ed.section, await self.ed.set_func(self.bridge, False))
 
 
 class DopplerAlarmSwitch(CoordinatorEntity[DopplerDataUpdateCoordinator], SwitchEntity):

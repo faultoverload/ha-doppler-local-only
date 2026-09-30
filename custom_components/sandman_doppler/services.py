@@ -50,8 +50,14 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.service import ServiceCall
 
+from .bridge_api import BridgeApi
+
 from .const import (
     DOMAIN,
+    SERVICE_ALARM_DISMISS,
+    SERVICE_ALARM_RING,
+    SERVICE_ALARM_SNOOZE,
+    SERVICE_VOICE_SAY,
     SERVICE_ACTIVATE_LIGHT_BAR_BLINK,
     SERVICE_ACTIVATE_LIGHT_BAR_COMET,
     SERVICE_ACTIVATE_LIGHT_BAR_PULSE,
@@ -213,6 +219,42 @@ class DopplerServices:
     @callback
     def async_register(self):
         """Register services."""
+        # Open-firmware bridge services (voice and the alarm engine)
+        self.hass.services.async_register(
+            DOMAIN,
+            SERVICE_VOICE_SAY,
+            self.handle_voice_say,
+            schema=self._expand_schema(
+                {
+                    vol.Optional("url"): cv.url,
+                    vol.Optional("path"): cv.string,
+                    vol.Optional(ATTR_VOLUME): vol.All(
+                        vol.Coerce(int), vol.Range(0, 100)
+                    ),
+                }
+            ),
+        )
+        self.hass.services.async_register(
+            DOMAIN,
+            SERVICE_ALARM_SNOOZE,
+            self.handle_alarm_snooze,
+            schema=self._expand_schema(
+                {vol.Optional("minutes"): vol.All(vol.Coerce(int), vol.Range(1, 120))}
+            ),
+        )
+        self.hass.services.async_register(
+            DOMAIN,
+            SERVICE_ALARM_DISMISS,
+            self.handle_alarm_dismiss,
+            schema=self._expand_schema({}),
+        )
+        self.hass.services.async_register(
+            DOMAIN,
+            SERVICE_ALARM_RING,
+            self.handle_alarm_ring,
+            schema=self._expand_schema({vol.Optional(ATTR_ID): vol.Coerce(int)}),
+        )
+
         self.hass.services.async_register(
             DOMAIN,
             SERVICE_SET_WEATHER_LOCATION,
@@ -535,3 +577,56 @@ class DopplerServices:
         rbc = RainbowConfiguration(**data)
         _LOGGER.debug("Called set_rainbow_mode service, sending %s", rbc)
         await call_doppyler_api_across_devices(devices, "set_rainbow_mode", rbc)
+
+    # ── open-firmware bridge services ─────────────────────────────────────
+
+    def _bridge_apis(self, devices: set[Doppler]) -> list[BridgeApi]:
+        return [BridgeApi(device) for device in devices]
+
+    async def _call_bridge_across_devices(
+        self, devices: set[Doppler], func_name: str, **kwargs: Any
+    ) -> Any:
+        apis = self._bridge_apis(devices)
+        results = await asyncio.gather(
+            *(getattr(api, func_name)(**kwargs) for api in apis), return_exceptions=True
+        )
+        if errors := [
+            tup for tup in zip(devices, results) if isinstance(tup[1], Exception)
+        ]:
+            raise HomeAssistantError(
+                "\n".join(
+                    f"{device} - {type(error).__name__}: {error}"
+                    for device, error in errors
+                )
+            )
+        return results
+
+    async def handle_voice_say(self, call: ServiceCall) -> None:
+        """Play a TTS clip (URL or path on the device) through the Doppler's speaker."""
+        data = call.data.copy()
+        devices = data.pop(ATTR_DEVICES)
+        if not data.get("url") and not data.get("path"):
+            raise HomeAssistantError("voice_say needs a url or a path")
+        await self._call_bridge_across_devices(
+            devices,
+            "voice_say",
+            url=data.get("url"),
+            path=data.get("path"),
+            volume=data.get(ATTR_VOLUME),
+        )
+
+    async def handle_alarm_snooze(self, call: ServiceCall) -> None:
+        data = call.data.copy()
+        await self._call_bridge_across_devices(
+            data.pop(ATTR_DEVICES), "alarm_snooze", minutes=data.get("minutes")
+        )
+
+    async def handle_alarm_dismiss(self, call: ServiceCall) -> None:
+        data = call.data.copy()
+        await self._call_bridge_across_devices(data.pop(ATTR_DEVICES), "alarm_dismiss")
+
+    async def handle_alarm_ring(self, call: ServiceCall) -> None:
+        data = call.data.copy()
+        await self._call_bridge_across_devices(
+            data.pop(ATTR_DEVICES), "alarm_ring", alarm_id=data.get(ATTR_ID)
+        )
