@@ -56,7 +56,7 @@ registered its event webhook on the device, receives every state change and butt
 | switch **Microphone Mute**, **Voice: Tap to Talk Tone**, **Voice: Wake Word Tone** | replace the Alexa switches |
 | button **Voice: Start Listening** | start an Assist session (like the MIC button) |
 | select **Voice: Wake Word** | the model the device's wake service listens for (needs `SANDMAN_WAKE_URI` on the device, see below) |
-| text **Display: Custom Digits** | up to four digits and a colon on the main display; empty hands the digits back to the clock |
+| text **Display: Custom Digits**, selects **Display: Digit 1-4**, switch **Display: Custom Colon** | anything on the four main digits: type it, or pick each slot from the characters the 7-segment font can show (0-9, A b C c d E F G H h I J L n O o P q r S t U u y Z, - _ = ° ' " [ ] ?, blank); empty hands the digits back to the clock |
 | binary_sensor **Voice Satellite** | HA's Wyoming integration is connected to the device (port 10700) |
 | sensor **Alarm State**, **Next Alarm**; buttons **Snooze Alarm**, **Dismiss Alarm** | the on-device alarm engine |
 | sensor **Weather** | value shown on the temperature display; attributes: scale, icons, condition, place |

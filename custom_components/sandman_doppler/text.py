@@ -82,19 +82,19 @@ class DopplerAlarmName(DopplerAlarmEntity, TextEntity):
 
 
 class DopplerCustomDigitsText(DopplerBridgeEntity[TextEntityDescription], TextEntity):
-    """Up to four digits (plus a colon) shown on the main display until cleared; the
-    display has 7-segment digits only, so letters are not possible. Empty text hands
-    the digits back to the clock when clock mode is on."""
+    """Up to four characters (plus a colon) on the main display until cleared: digits and
+    the letters/symbols a 7-segment digit can show (A b C c d E F G H h I J L n O o P q r
+    S t U u y Z - _ = ° ' " [ ] ?). Empty text hands the digits back to the clock."""
 
     _attr_native_max = 5
-    _attr_pattern = r"^[0-9 :]{0,5}$"
-    _attr_native_value = ""
+
+    @property
+    def native_value(self) -> str | None:
+        return self.bridge_get("display", "custom_text", default="")
 
     async def async_set_value(self, value: str) -> None:
         text = value.strip()
-        digits = text.replace(":", "")
-        if len(digits) > 4:
-            raise ValueError("at most four digits")
-        await self.bridge.set_digits(text)
-        self._attr_native_value = text
-        self.async_write_ha_state()
+        if len(text.replace(":", "")) > 4:
+            raise ValueError("at most four characters plus a colon")
+        result = await self.bridge.set_digits(text)
+        self.bridge_set("display", {"custom_text": result.get("custom_text", text)})

@@ -97,6 +97,14 @@ BRIDGE_SWITCH_ENTITY_DESCRIPTIONS = [
         set_func=lambda api, on: api.voice_settings(wake_word_tone=on),
     ),
     DopplerBridgeSwitchEntityDescription(
+        "Display Colon",
+        name="Display: Custom Colon",
+        icon="mdi:colon",
+        state_path=("display", "custom_text"),
+        section="display",
+        set_func=None,  # handled by DopplerDigitColonSwitch
+    ),
+    DopplerBridgeSwitchEntityDescription(
         "Clock Mode",
         name="Display: Clock Mode",
         icon="mdi:clock-digital",
@@ -198,7 +206,11 @@ async def async_setup_entry(
             ]
         )
         entities.extend(
-            DopplerBridgeSwitch(coordinator, entry, device, description)
+            (
+                DopplerDigitColonSwitch
+                if description.key == "Display Colon"
+                else DopplerBridgeSwitch
+            )(coordinator, entry, device, description)
             for description in BRIDGE_SWITCH_ENTITY_DESCRIPTIONS
         )
         async_add_devices(entities)
@@ -378,3 +390,28 @@ class DopplerAlarmSwitch(CoordinatorEntity[DopplerDataUpdateCoordinator], Switch
                 self._alarm_deleted,
             )
         )
+
+
+class DopplerDigitColonSwitch(DopplerBridgeSwitch):
+    """The colon between the custom digits (Display: Digit 1-4)."""
+
+    @property
+    def is_on(self) -> bool | None:
+        text = self.bridge_get("display", "custom_text")
+        return None if text is None else ":" in str(text)
+
+    async def _set(self, on: bool) -> None:
+        from .select import custom_digits
+
+        chars, _ = custom_digits(self.bridge_data)
+        text = "".join(chars)
+        if on:
+            text = text[:2] + ":" + text[2:]
+        result = await self.bridge.set_digits(text if text.strip() or on else "")
+        self.bridge_set("display", {"custom_text": result.get("custom_text", text)})
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._set(False)

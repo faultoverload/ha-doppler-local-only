@@ -183,6 +183,20 @@ async def async_setup_entry(
             DopplerBridgeSelect(coordinator, entry, device, description)
             for description in BRIDGE_SELECT_ENTITY_DESCRIPTIONS
         )
+        entities.extend(
+            DopplerDigitSlotSelect(
+                coordinator,
+                entry,
+                device,
+                SelectEntityDescription(
+                    f"Display Digit {i + 1}",
+                    name=f"Display: Digit {i + 1}",
+                    icon="mdi:numeric",
+                ),
+                i,
+            )
+            for i in range(4)
+        )
         async_add_devices(entities)
         setup_alarm_entities(
             hass,
@@ -339,3 +353,51 @@ class DopplerAlarmRepeatSelect(DopplerAlarmEntity, SelectEntity):
         if option == REPEAT_CUSTOM:
             return  # keep the current custom day set (use update_alarm for other combinations)
         await self._save(repeat=list(REPEAT_OPTIONS[option]))
+
+
+BLANK_LABEL = "(blank)"
+
+
+def custom_digits(bridge_data: dict | None) -> tuple[list[str], bool]:
+    """The four characters and the colon flag of the device's current custom text."""
+    text = (
+        str((bridge_data or {}).get("display", {}).get("custom_text") or "")
+        if bridge_data
+        else ""
+    )
+    colon = ":" in text
+    chars = list(text.replace(":", ""))[:4]
+    chars += [" "] * (4 - len(chars))
+    return chars, colon
+
+
+class DopplerDigitSlotSelect(
+    DopplerBridgeEntity[SelectEntityDescription], SelectEntity
+):
+    """One of the four main digits: pick any character the 7-segment font can show.
+    Setting a slot shows the composed text until Display: Custom Digits is cleared."""
+
+    def __init__(self, coordinator, config_entry, device, description, slot: int):
+        super().__init__(coordinator, config_entry, device, description)
+        self._slot = slot
+
+    @property
+    def options(self) -> list[str]:
+        chars = self.bridge_get("display", "characters") or list("0123456789 ")
+        return [BLANK_LABEL if c == " " else str(c) for c in chars]
+
+    @property
+    def current_option(self) -> str | None:
+        chars, _ = custom_digits(self.bridge_data)
+        value = chars[self._slot]
+        label = BLANK_LABEL if value == " " else value
+        return label if label in self.options else None
+
+    async def async_select_option(self, option: str) -> None:
+        chars, colon = custom_digits(self.bridge_data)
+        chars[self._slot] = " " if option == BLANK_LABEL else option
+        text = "".join(chars)
+        if colon:
+            text = text[:2] + ":" + text[2:]
+        result = await self.bridge.set_digits(text if text.strip() else "")
+        self.bridge_set("display", {"custom_text": result.get("custom_text", text)})
