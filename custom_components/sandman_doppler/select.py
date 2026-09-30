@@ -27,6 +27,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
+from .alarm_entities import (
+    REPEAT_CUSTOM,
+    REPEAT_OPTIONS,
+    DopplerAlarmEntity,
+    repeat_option,
+    setup_alarm_entities,
+)
 from .bridge_api import ANIMATIONS, DAY_NIGHT_MODES
 from .entity import DopplerBridgeEntity, DopplerEntity
 from .helpers import get_enum_from_name, normalize_enum_name
@@ -92,7 +99,7 @@ class DopplerBridgeSelectEntityDescription(SelectEntityDescription):
 BRIDGE_SELECT_ENTITY_DESCRIPTIONS = [
     DopplerBridgeSelectEntityDescription(
         "Day/Night Selection",
-        name="Day/Night Selection",
+        name="Day/Night: Mode (day, night, auto)",
         icon="mdi:theme-light-dark",
         entity_category=EntityCategory.CONFIG,
         state_path=("display", "day_night_mode"),
@@ -106,7 +113,7 @@ BRIDGE_SELECT_ENTITY_DESCRIPTIONS = [
     ),
     DopplerBridgeSelectEntityDescription(
         "Lightbar Animation",
-        name="Lightbar Animation",
+        name="Display: Lightbar Animation",
         icon="mdi:animation-play",
         state_path=("lightbar", "animation"),
         section="lightbar",
@@ -164,6 +171,13 @@ async def async_setup_entry(
             for description in BRIDGE_SELECT_ENTITY_DESCRIPTIONS
         )
         async_add_devices(entities)
+        setup_alarm_entities(
+            hass,
+            entry,
+            device,
+            async_add_devices,
+            [DopplerAlarmSoundSelect, DopplerAlarmRepeatSelect],
+        )
 
     entry.async_on_unload(
         async_dispatcher_connect(
@@ -254,3 +268,46 @@ class DopplerBridgeSelect(
             self.ed.section,
             self.ed.result_func(result) if isinstance(result, dict) else None,
         )
+
+
+class DopplerAlarmSoundSelect(DopplerAlarmEntity, SelectEntity):
+    suffix = "sound"
+    label = "Sound"
+    _attr_icon = "mdi:music"
+
+    @property
+    def options(self) -> list[str]:
+        sounds = list(self.device.alarm_sounds or [])
+        current = self.alarm.sound if self.alarm else None
+        if current and current not in sounds:
+            sounds.append(current)
+        return sounds
+
+    @property
+    def current_option(self) -> str | None:
+        return self.alarm.sound if self.alarm else None
+
+    async def async_select_option(self, option: str) -> None:
+        await self._save(sound=option)
+
+
+class DopplerAlarmRepeatSelect(DopplerAlarmEntity, SelectEntity):
+    suffix = "repeat"
+    label = "Repeat"
+    _attr_icon = "mdi:calendar-refresh"
+    _attr_options = list(REPEAT_OPTIONS) + [REPEAT_CUSTOM]
+
+    @property
+    def current_option(self) -> str | None:
+        return repeat_option(self.alarm) if self.alarm else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if not self.alarm:
+            return None
+        return {"days": [day.value for day in self.alarm.repeat]}
+
+    async def async_select_option(self, option: str) -> None:
+        if option == REPEAT_CUSTOM:
+            return  # keep the current custom day set (use update_alarm for other combinations)
+        await self._save(repeat=list(REPEAT_OPTIONS[option]))

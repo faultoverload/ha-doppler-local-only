@@ -30,6 +30,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
 from .const import DOMAIN
+from .alarm_entities import DopplerAlarmEntity, setup_alarm_entities
 from .entity import DopplerEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ NUMBER_ENTITY_DESCRIPTIONS = [
     ),
     DopplerNumberEntityDescription(
         "Day to Night Transition",
-        name="Day to Night Transition",
+        name="Day/Night: Night Below (light level)",
         icon="mdi:weather-night",
         native_min_value=0,
         native_max_value=65535,
@@ -86,7 +87,7 @@ NUMBER_ENTITY_DESCRIPTIONS = [
     ),
     DopplerNumberEntityDescription(
         "Night to Day Transition",
-        name="Night to Day Transition",
+        name="Day/Night: Day Above (light level)",
         icon="mdi:weather-sunny",
         native_min_value=0,
         native_max_value=65535,
@@ -115,6 +116,9 @@ async def async_setup_entry(
             for description in NUMBER_ENTITY_DESCRIPTIONS
         ]
         async_add_devices(entities)
+        setup_alarm_entities(
+            hass, entry, device, async_add_devices, [DopplerAlarmVolume]
+        )
 
     entry.async_on_unload(
         async_dispatcher_connect(
@@ -147,3 +151,21 @@ class DopplerNumber(DopplerEntity[DopplerNumberEntityDescription], NumberEntity)
             self.device, value
         )
         self.async_write_ha_state()
+
+
+class DopplerAlarmVolume(DopplerAlarmEntity, NumberEntity):
+    suffix = "volume"
+    label = "Volume"
+    _attr_icon = "mdi:volume-high"
+    _attr_native_min_value = 1
+    _attr_native_max_value = 100
+    _attr_native_step = 1
+    _attr_mode = NumberMode.SLIDER
+    _attr_native_unit_of_measurement = PERCENTAGE
+
+    @property
+    def native_value(self) -> int | None:
+        return self.alarm.volume if self.alarm else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        await self._save(volume=int(value))

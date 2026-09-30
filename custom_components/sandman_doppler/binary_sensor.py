@@ -50,7 +50,7 @@ BRIDGE_BINARY_SENSOR_ENTITY_DESCRIPTIONS = [
     (
         DopplerBinarySensorEntityDescription(
             "Voice Satellite",
-            name="Voice Satellite",
+            name="Voice: Satellite Connected",
             device_class=BinarySensorDeviceClass.CONNECTIVITY,
             entity_category=EntityCategory.DIAGNOSTIC,
         ),

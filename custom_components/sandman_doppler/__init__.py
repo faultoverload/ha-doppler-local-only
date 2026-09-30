@@ -17,12 +17,23 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.network import get_url
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .bridge_api import SECTION_FOR_TOPIC, BridgeApi
-from .const import ATTR_BRIDGE, DOMAIN, CONF_HOST, CONF_PORT, CONF_LOCAL_KEY, CONF_DSN
+from .const import (
+    ALEXA_UNIQUE_ID_SUFFIXES,
+    ATTR_BRIDGE,
+    CONF_DSN,
+    CONF_HOST,
+    CONF_LOCAL_KEY,
+    CONF_PORT,
+    CONF_WEATHER_ENTITY,
+    CONF_WEATHER_SCALE,
+    DOMAIN,
+)
 from .http import DopplerEventView, DopplerWebhookView
 from .services import DopplerServices
 
@@ -39,6 +50,8 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.SIREN,
     Platform.SWITCH,
+    Platform.TEXT,
+    Platform.TIME,
 ]
 
 
@@ -67,6 +80,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     dev_reg = dr.async_get(hass)
     ent_reg = er.async_get(hass)
+
+    # The Alexa entities of earlier versions: there is no Alexa on the open firmware
+    for ent in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if ent.unique_id and ent.unique_id.endswith(ALEXA_UNIQUE_ID_SUFFIXES):
+            _LOGGER.info("Removing stale Alexa entity %s", ent.entity_id)
+            ent_reg.async_remove(ent.entity_id)
 
     if not hass.data[DOMAIN][entry.entry_id].get("platform_setup_complete"):
         hass.data[DOMAIN][entry.entry_id]["platform_setup_complete"] = True
@@ -120,6 +139,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     DopplerServices(hass, ent_reg, dev_reg, client).async_register()
 
+    coordinator.async_setup_weather_feed()
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
     return True
 
 
@@ -140,7 +162,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
+    """Reload config entry (also after an options change)."""
+    if not entry.options.get(CONF_WEATHER_ENTITY):
+        # the weather feed was switched off: hand the display back to the device's own fetcher
+        for entry_data in [hass.data.get(DOMAIN, {}).get(entry.entry_id, {})]:
+            for value in entry_data.values():
+                if isinstance(value, DopplerDataUpdateCoordinator):
+                    try:
+                        await value.bridge.clear_external_weather()
+                    except DopplerException:
+                        pass
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
 
@@ -251,6 +282,56 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.hass, f"{DOMAIN}_{self._entry.entry_id}_device_added", self.doppler
             )
         return data
+
+    # ── Home Assistant weather entity -> the device's temperature display ──
+
+    @callback
+    def async_setup_weather_feed(self) -> None:
+        """Push the configured HA weather entity's temperature and condition to the device
+        whenever it changes (options: weather_entity, weather_scale)."""
+        entity_id = self._entry.options.get(CONF_WEATHER_ENTITY)
+        if not entity_id:
+            return
+
+        @callback
+        def _changed(event) -> None:
+            self.hass.async_create_task(self._push_weather(entity_id))
+
+        self._entry.async_on_unload(
+            async_track_state_change_event(self.hass, [entity_id], _changed)
+        )
+        self.hass.async_create_task(self._push_weather(entity_id))
+
+    async def _push_weather(self, entity_id: str) -> None:
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return
+        temp = state.attributes.get("temperature")
+        unit = str(
+            state.attributes.get("temperature_unit")
+            or self.hass.config.units.temperature_unit
+        )
+        scale_opt = self._entry.options.get(CONF_WEATHER_SCALE, "auto")
+        scale = "C" if "C" in unit else "F"
+        if scale_opt in ("F", "C") and temp is not None and scale != scale_opt:
+            temp = temp * 9 / 5 + 32 if scale_opt == "F" else (temp - 32) * 5 / 9
+            scale = scale_opt
+        wind = state.attributes.get("wind_speed")
+        wind_unit = str(state.attributes.get("wind_speed_unit") or "km/h")
+        if wind is not None and "mph" in wind_unit:
+            wind = float(wind) * 1.609
+        elif wind is not None and "m/s" in wind_unit:
+            wind = float(wind) * 3.6
+        try:
+            result = await self.bridge.set_external_weather(
+                temp, scale, state.state, wind_kmh=wind, place=state.name
+            )
+        except DopplerException as exc:
+            _LOGGER.debug("Weather push to %s failed: %s", self.doppler.dsn, exc)
+            return
+        if self.data and isinstance(self.data.get(ATTR_BRIDGE), dict):
+            self.data[ATTR_BRIDGE]["weather"] = result
+            self.async_set_updated_data(self.data)
 
     @callback
     def apply_bridge_update(self, topic: str, payload: Any) -> None:

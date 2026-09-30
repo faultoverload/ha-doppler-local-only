@@ -48,3 +48,13 @@ SERVICE_VOICE_SAY = "voice_say"
 SERVICE_ALARM_SNOOZE = "alarm_snooze"
 SERVICE_ALARM_DISMISS = "alarm_dismiss"
 SERVICE_ALARM_RING = "alarm_ring"
+
+# Options (config entry options): feed a Home Assistant weather entity to the device's display
+CONF_WEATHER_ENTITY = "weather_entity"
+CONF_WEATHER_SCALE = "weather_scale"  # "F", "C" or "auto" (the entity's unit)
+ALEXA_UNIQUE_ID_SUFFIXES = (
+    "_alexa",
+    "_alexa_tap_to_talk_tone",
+    "_alexa_wake_word_tone",
+    "_ascending_alarms",
+)

@@ -14,9 +14,17 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
+from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, CONF_LOCAL_KEY, CONF_DSN
+from .const import (
+    CONF_DSN,
+    CONF_LOCAL_KEY,
+    CONF_WEATHER_ENTITY,
+    CONF_WEATHER_SCALE,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,6 +33,13 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Doppler clocks (local-only)."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> "DopplerOptionsFlow":
+        return DopplerOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, str] = None) -> FlowResult:
         """Handle a flow initialized by the user."""
@@ -151,3 +166,35 @@ class DopplerFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 exc,
             )
             return False
+
+
+class DopplerOptionsFlow(config_entries.OptionsFlowWithReload):
+    """Options: which Home Assistant weather entity (if any) drives the device's weather display."""
+
+    async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
+        if user_input is not None:
+            if not user_input.get(CONF_WEATHER_ENTITY):
+                user_input[CONF_WEATHER_ENTITY] = ""
+            return self.async_create_entry(title="", data=user_input)
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_WEATHER_ENTITY,
+                    description={
+                        "suggested_value": options.get(CONF_WEATHER_ENTITY, "")
+                    },
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="weather")
+                ),
+                vol.Optional(
+                    CONF_WEATHER_SCALE, default=options.get(CONF_WEATHER_SCALE, "auto")
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["auto", "F", "C"],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

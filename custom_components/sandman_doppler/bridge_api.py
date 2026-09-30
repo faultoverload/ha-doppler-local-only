@@ -105,3 +105,26 @@ class BridgeApi:
         return await self._call(
             "alarms/ring", "POST", {"id": alarm_id} if alarm_id is not None else {}
         )
+
+    # weather fed by Home Assistant
+    async def set_external_weather(
+        self,
+        value: float | None,
+        scale: str,
+        condition: str | None,
+        wind_kmh: float | None = None,
+        place: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "value": value,
+            "scale": scale,
+            "condition": condition or "",
+        }
+        if wind_kmh is not None:
+            body["wind_kmh"] = wind_kmh
+        if place:
+            body["place"] = place
+        return await self._call("weather/external", "PUT", body)
+
+    async def clear_external_weather(self) -> dict[str, Any]:
+        return await self._call("weather/external", "PUT", {"clear": True})

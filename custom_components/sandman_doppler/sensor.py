@@ -75,14 +75,6 @@ SENSOR_ENTITY_DESCRIPTIONS = [
         state_key=ATTR_WIFI,
         state_func=lambda x: int(x.signal_strength),
     ),
-    DopplerSensorEntityDescription(
-        "Weather: Location",
-        name="Weather: Location",
-        icon="mdi:earth",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        state_key=ATTR_WEATHER,
-        state_func=lambda x: x.location,
-    ),
 ]
 
 
@@ -107,7 +99,7 @@ def _next_alarm(nxt: Any) -> str | None:
 BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
     DopplerBridgeSensorEntityDescription(
         "Voice Assistant",
-        name="Voice Assistant",
+        name="Voice: Assistant State",
         icon="mdi:account-voice",
         state_path=("voice", "state"),
         attributes_path=("voice",),
@@ -123,7 +115,7 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
     ),
     DopplerBridgeSensorEntityDescription(
         "Alarm State",
-        name="Alarm State",
+        name="Alarm: State",
         icon="mdi:alarm",
         state_path=("alarms", "state"),
         attributes_path=("alarms",),
@@ -131,7 +123,7 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
     ),
     DopplerBridgeSensorEntityDescription(
         "Next Alarm",
-        name="Next Alarm",
+        name="Alarm: Next",
         icon="mdi:alarm-check",
         state_path=("alarms", "next"),
         state_func=_next_alarm,
@@ -139,7 +131,7 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
     ),
     DopplerBridgeSensorEntityDescription(
         "Weather",
-        name="Weather",
+        name="Weather: Shown",
         icon="mdi:weather-partly-cloudy",
         state_path=("weather", "value"),
         attributes_path=("weather",),
@@ -192,7 +184,7 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
     ),
     DopplerBridgeSensorEntityDescription(
         "PSoC Battery",
-        name="PSoC Battery",
+        name="PSoC Backup Battery (raw)",
         icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_path=("psoc", "battery"),

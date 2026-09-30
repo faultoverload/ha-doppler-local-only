@@ -15,8 +15,9 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
+from .alarm_entities import DopplerAlarmEntity, new_alarm, setup_alarm_entities
 from .const import DOMAIN
-from .entity import DopplerBridgeEntity
+from .entity import DopplerBridgeEntity, DopplerEntity
 
 
 @dataclass
@@ -62,9 +63,23 @@ async def async_setup_entry(
         coordinator: DopplerDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id][
             device.dsn
         ]
-        async_add_devices(
+        entities: list[Any] = [
             DopplerButton(coordinator, entry, device, description)
             for description in BUTTON_ENTITY_DESCRIPTIONS
+        ]
+        entities.append(
+            DopplerAddAlarmButton(
+                coordinator,
+                entry,
+                device,
+                ButtonEntityDescription(
+                    "Add Alarm", name="Alarm: Add New", icon="mdi:alarm-plus"
+                ),
+            )
+        )
+        async_add_devices(entities)
+        setup_alarm_entities(
+            hass, entry, device, async_add_devices, [DopplerDeleteAlarmButton]
         )
 
     entry.async_on_unload(
@@ -82,3 +97,21 @@ class DopplerButton(DopplerBridgeEntity[DopplerButtonEntityDescription], ButtonE
         if self.ed.section and isinstance(result, dict):
             result = {k: v for k, v in result.items() if k != "ok"}
             self.bridge_set(self.ed.section, result)
+
+
+class DopplerAddAlarmButton(DopplerEntity[ButtonEntityDescription], ButtonEntity):
+    """Creates a disabled 07:00 alarm; its entities appear on the next refresh."""
+
+    async def async_press(self) -> None:
+        await self.device.add_alarm(new_alarm(self.device))
+        await self.coordinator.async_request_refresh()
+
+
+class DopplerDeleteAlarmButton(DopplerAlarmEntity, ButtonEntity):
+    suffix = "delete"
+    label = "Delete"
+    _attr_icon = "mdi:alarm-minus"
+
+    async def async_press(self) -> None:
+        await self.device.delete_alarm(self.alarm_id)
+        await self.coordinator.async_request_refresh()

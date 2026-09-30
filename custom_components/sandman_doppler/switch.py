@@ -72,7 +72,7 @@ class DopplerBridgeSwitchEntityDescription(SwitchEntityDescription):
 BRIDGE_SWITCH_ENTITY_DESCRIPTIONS = [
     DopplerBridgeSwitchEntityDescription(
         "Microphone Mute",
-        name="Microphone Mute",
+        name="Voice: Microphone Mute",
         icon="mdi:microphone-off",
         state_path=("voice", "muted"),
         section="voice",
@@ -98,7 +98,7 @@ BRIDGE_SWITCH_ENTITY_DESCRIPTIONS = [
     ),
     DopplerBridgeSwitchEntityDescription(
         "Clock Mode",
-        name="Clock Mode",
+        name="Display: Clock Mode",
         icon="mdi:clock-digital",
         state_path=("display", "clock"),
         section="display",
@@ -326,7 +326,7 @@ class DopplerAlarmSwitch(CoordinatorEntity[DopplerDataUpdateCoordinator], Switch
     @property
     def name(self) -> str:
         """Return the name of the alarm."""
-        return f"Alarm {self.alarm.id} ({self.alarm.name})"
+        return f"Alarm {self.alarm.id}: Enabled ({self.alarm.name})"
 
     @property
     def is_on(self) -> bool | None:

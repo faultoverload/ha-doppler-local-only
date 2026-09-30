@@ -241,7 +241,26 @@ class BaseDopplerLight(DopplerEntity[DopplerLightEntityDescription], LightEntity
 
 
 class DopplerLight(BaseDopplerLight):
-    """Doppler Light class."""
+    """Day/Night display and button brightness + colour. "Off" is brightness 0
+    (the digits / buttons go dark in that mode); "on" restores the last brightness."""
+
+    _last_brightness_pct = 100
+
+    @property
+    def is_on(self) -> bool:
+        if self.ed.brightness_key is None:
+            return True
+        value = self.device_data.get(self.ed.brightness_key)
+        return value is None or int(value) > 0
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        current = self.device_data.get(self.ed.brightness_key)
+        if current:
+            self._last_brightness_pct = int(current)
+        self.device_data[self.ed.brightness_key] = await self.ed.set_brightness_func(
+            self.device, 0
+        )
+        self.async_write_ha_state()
 
     def __init__(
         self,
@@ -272,7 +291,10 @@ class DopplerLight(BaseDopplerLight):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the device on."""
-        if (brightness := kwargs.get(ATTR_BRIGHTNESS)) is not None:
+        brightness = kwargs.get(ATTR_BRIGHTNESS)
+        if brightness is None and not self.is_on:
+            brightness = max(1, self._last_brightness_pct) * 255 // 100
+        if brightness is not None:
             brightness = await self._async_set_brightness(brightness)
             signal_name = (
                 f"{self._sync_signal_prefix}_{slugify(self.ed.key)}_brightness"

@@ -51,7 +51,7 @@ registered its event webhook on the device, receives every state change and butt
 | light **Lightbar** | the 29-LED bar: on/off, RGB, brightness; `animation` attribute |
 | select **Lightbar Animation** | off / sweep / pulse / comet / sparkle |
 | switch **Clock Mode** | the bridge keeps the time on the digits |
-| select **Day/Night Selection** | day / night / auto (light-sensor thresholds are the transition numbers) |
+| select **Day/Night: Mode** | day / night / auto (light-sensor thresholds are the *Night Below* / *Day Above* numbers) |
 | sensor **Voice Assistant** | unavailable / idle / listening / processing / responding / error; attributes: muted, pipeline, wake word, transcript |
 | switch **Microphone Mute**, **Voice: Tap to Talk Tone**, **Voice: Wake Word Tone** | replace the Alexa switches |
 | button **Start Listening** | start an Assist session (like the MIC button) |
@@ -60,6 +60,21 @@ registered its event webhook on the device, receives every state change and butt
 | sensor **Weather** | value shown on the temperature display; attributes: scale, icons, condition, place |
 | binary_sensor **Audio Playing** | something is playing |
 | diagnostics **Bridge Version**, **Bridge Uptime**, **CPU Temperature**, **Memory Used**, **PSoC Battery**, **PSoC Firmware** | |
+
+**Alarms from the UI**: press *Alarm: Add New* and a disabled 07:00 alarm appears with its own entities:
+*Alarm N: Enabled* (switch), *Time*, *Name*, *Sound* (the device's sound files), *Repeat* (Once / Every day /
+Weekdays / Weekends; other day sets via the `update_alarm` service show as Custom), *Volume* and *Delete*.
+Alarm colour is still set with `add_alarm`/`update_alarm`.
+
+**Weather**: type a place into *Weather: Location* (city, "City, ST" or "lat,lon") and turn *Weather: Displayed*
+on for the device's own Open-Meteo fetch, or in the integration's *Configure* dialog pick one of your Home
+Assistant weather entities: its temperature and condition are pushed to the display whenever they change
+(*Weather: Mode* is then ignored; the scale follows the entity or the option).
+
+**Day/night**: the *Day …*/*Night …* lights are the two colour/brightness sets; which one is active follows
+*Day/Night: Mode* (day, night, or auto from the light sensor, switching to night below *Night Below* and back
+above *Day Above*; *Light Detected* shows the current reading). Turning a display or button light "off" sets its
+brightness to 0.
 
 Services: `sandman_doppler.voice_say` (play a TTS URL or a file on the device), `alarm_snooze`,
 `alarm_dismiss`, `alarm_ring`. Events on the HA bus: `sandman_doppler_button_event` (every press /

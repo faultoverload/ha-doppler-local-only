@@ -21,5 +21,16 @@
     "trigger_type": {
       "sandman_doppler_button_pressed": "Smart button {subtype} pushed"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Weather on the Doppler's display",
+        "data": {
+          "weather_entity": "Home Assistant weather entity to show (leave empty to let the device fetch Open-Meteo for its Weather: Location)",
+          "weather_scale": "Temperature scale on the display (auto = the entity's unit)"
+        }
+      }
+    }
   }
 }
