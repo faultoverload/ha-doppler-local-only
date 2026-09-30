@@ -54,12 +54,14 @@ registered its event webhook on the device, receives every state change and butt
 | select **Day/Night: Mode** | day / night / auto (light-sensor thresholds are the *Night Below* / *Day Above* numbers) |
 | sensor **Voice Assistant** | unavailable / idle / listening / processing / responding / error; attributes: muted, pipeline, wake word, transcript |
 | switch **Microphone Mute**, **Voice: Tap to Talk Tone**, **Voice: Wake Word Tone** | replace the Alexa switches |
-| button **Start Listening** | start an Assist session (like the MIC button) |
+| button **Voice: Start Listening** | start an Assist session (like the MIC button) |
+| select **Voice: Wake Word** | the model the device's wake service listens for (needs `SANDMAN_WAKE_URI` on the device, see below) |
+| text **Display: Custom Digits** | up to four digits and a colon on the main display; empty hands the digits back to the clock |
 | binary_sensor **Voice Satellite** | HA's Wyoming integration is connected to the device (port 10700) |
 | sensor **Alarm State**, **Next Alarm**; buttons **Snooze Alarm**, **Dismiss Alarm** | the on-device alarm engine |
 | sensor **Weather** | value shown on the temperature display; attributes: scale, icons, condition, place |
 | binary_sensor **Audio Playing** | something is playing |
-| diagnostics **Bridge Version**, **Bridge Uptime**, **CPU Temperature**, **Memory Used**, **PSoC Battery**, **PSoC Firmware** | |
+| diagnostics **Bridge Version**, **Bridge Uptime**, **CPU Temperature**, **Memory Used**, **PSoC Firmware** | |
 
 **Alarms from the UI**: press *Alarm: Add New* and a disabled 07:00 alarm appears with its own entities:
 *Alarm N: Enabled* (switch), *Time*, *Name*, *Sound* (the device's sound files), *Repeat* (Once / Every day /
@@ -87,6 +89,12 @@ there is no Alexa on the open firmware, and the device answers those endpoints w
 
 The voice pipeline itself is Home Assistant's **Wyoming Protocol** integration pointed at the Doppler's IP,
 port 10700 (the bridge runs a Wyoming satellite); this integration shows its state and settings.
+
+**Wake word**: install the **openWakeWord** add-on in Home Assistant (it serves Wyoming on port 10400) and set
+`SANDMAN_WAKE_URI=tcp://<HA host>:10400` in the device's `bridge.env`. The Doppler then streams its microphone to
+that service while idle and starts the Assist pipeline at the speech stage when the word is detected, like the
+Voice Preview Edition / Satellite1 do on their own hardware; the pipeline in HA does not need a wake-word engine.
+*Voice: Wake Word* selects the model (the list comes from the add-on).
 
 ## Prerequisites: Finding Your Device Details
 

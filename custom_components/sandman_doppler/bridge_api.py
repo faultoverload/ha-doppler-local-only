@@ -128,3 +128,11 @@ class BridgeApi:
 
     async def clear_external_weather(self) -> dict[str, Any]:
         return await self._call("weather/external", "PUT", {"clear": True})
+
+    async def set_digits(
+        self, text: str, color: tuple[int, int, int] | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"text": text}
+        if color is not None:
+            body["color"] = list(color)
+        return await self._call("bridge/digits", "PUT", body)

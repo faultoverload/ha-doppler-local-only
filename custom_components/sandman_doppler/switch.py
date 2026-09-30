@@ -358,6 +358,16 @@ class DopplerAlarmSwitch(CoordinatorEntity[DopplerDataUpdateCoordinator], Switch
     #     await self.device.update_alarms([self.alarm])
     #     self.async_write_ha_state()
 
+    @callback
+    def _alarm_deleted(self) -> None:
+        from homeassistant.helpers import entity_registry as er
+
+        ent_reg = er.async_get(self.hass)
+        if self.entity_id and ent_reg.async_get(self.entity_id):
+            ent_reg.async_remove(self.entity_id)
+        else:
+            self.hass.async_create_task(self.async_remove(force_remove=True))
+
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
@@ -365,6 +375,6 @@ class DopplerAlarmSwitch(CoordinatorEntity[DopplerDataUpdateCoordinator], Switch
             async_dispatcher_connect(
                 self.hass,
                 f"{DOMAIN}_{self.device.dsn}_alarm_{self.alarm.id}_removed",
-                functools.partial(self.async_remove, force_remove=True),
+                self._alarm_deleted,
             )
         )

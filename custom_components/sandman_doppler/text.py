@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import DopplerDataUpdateCoordinator
 from .alarm_entities import DopplerAlarmEntity, setup_alarm_entities
 from .const import DOMAIN
-from .entity import DopplerEntity
+from .entity import DopplerBridgeEntity, DopplerEntity
 
 
 async def async_setup_entry(
@@ -79,3 +79,22 @@ class DopplerAlarmName(DopplerAlarmEntity, TextEntity):
 
     async def async_set_value(self, value: str) -> None:
         await self._save(name=value.strip() or f"Alarm {self.alarm_id}")
+
+
+class DopplerCustomDigitsText(DopplerBridgeEntity[TextEntityDescription], TextEntity):
+    """Up to four digits (plus a colon) shown on the main display until cleared; the
+    display has 7-segment digits only, so letters are not possible. Empty text hands
+    the digits back to the clock when clock mode is on."""
+
+    _attr_native_max = 5
+    _attr_pattern = r"^[0-9 :]{0,5}$"
+    _attr_native_value = ""
+
+    async def async_set_value(self, value: str) -> None:
+        text = value.strip()
+        digits = text.replace(":", "")
+        if len(digits) > 4:
+            raise ValueError("at most four digits")
+        await self.bridge.set_digits(text)
+        self._attr_native_value = text
+        self.async_write_ha_state()

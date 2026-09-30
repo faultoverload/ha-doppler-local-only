@@ -183,13 +183,6 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
         state_path=("system", "mem_used_pct"),
     ),
     DopplerBridgeSensorEntityDescription(
-        "PSoC Battery",
-        name="PSoC Backup Battery (raw)",
-        icon="mdi:battery",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        state_path=("psoc", "battery"),
-    ),
-    DopplerBridgeSensorEntityDescription(
         "PSoC Firmware",
         name="PSoC Firmware",
         icon="mdi:chip",

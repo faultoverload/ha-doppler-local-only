@@ -112,6 +112,19 @@ BRIDGE_SELECT_ENTITY_DESCRIPTIONS = [
         },
     ),
     DopplerBridgeSelectEntityDescription(
+        "Voice Wake Word",
+        name="Voice: Wake Word",
+        icon="mdi:ear-hearing",
+        entity_category=EntityCategory.CONFIG,
+        state_path=("voice", "wake_word_setting"),
+        section="voice",
+        options_list=None,  # from the wake service: voice.wake.names
+        set_func=lambda api, val: api.voice_settings(
+            wake_word="" if val == "(service default)" else val
+        ),
+        result_func=lambda r: {"wake_word_setting": r.get("wake_word", "")},
+    ),
+    DopplerBridgeSelectEntityDescription(
         "Lightbar Animation",
         name="Display: Lightbar Animation",
         icon="mdi:animation-play",
@@ -252,7 +265,20 @@ class DopplerBridgeSelect(
 
     @property
     def options(self) -> list[str]:
-        return list(self.ed.options_list or [])
+        if self.ed.options_list is not None:
+            return list(self.ed.options_list)
+        names = self.bridge_get("voice", "wake", "names") or []
+        current = self.bridge_get(*self.ed.state_path)
+        opts = ["(service default)"] + [str(n) for n in names]
+        if current and str(current) not in opts:
+            opts.append(str(current))
+        return opts
+
+    @property
+    def available(self) -> bool:
+        if self.ed.options_list is None and not self.bridge_get("voice", "wake"):
+            return False  # no wake service configured on the device (SANDMAN_WAKE_URI)
+        return super().available
 
     @property
     def current_option(self) -> str | None:
@@ -260,6 +286,8 @@ class DopplerBridgeSelect(
         if value is None:
             return None
         value = str(value)
+        if self.ed.options_list is None and value == "":
+            return "(service default)"
         return value if value in self.options else None
 
     async def async_select_option(self, option: str) -> None:
