@@ -114,6 +114,7 @@ BRIDGE_SENSOR_ENTITY_DESCRIPTIONS = [
             "text",
             "response",
             "satellite",
+            "wake",
         ),
     ),
     DopplerBridgeSensorEntityDescription(
