@@ -1,5 +1,7 @@
 # Sandman Doppler Integration
 
+> **This is the faultoverload fork (1.2.2-local).** It works with the stock firmware over the local API and, with the open-firmware bridge from [faultoverload/sandman-doppler](https://github.com/faultoverload/sandman-doppler) on the clock, adds voice, alarms from the UI (with radio and podcast streams), a speaker media player, Bluetooth speaker mode, weather, day/night, custom digits and colours, all without MQTT, a cloud or the mobile app. Install it from HACS as a custom repository (`faultoverload/ha-doppler-local-only`, category Integration). Setup, every entity and troubleshooting are documented in the main repository: [home-assistant.md](https://github.com/faultoverload/sandman-doppler/blob/main/docs/home-assistant.md) and [controls.md](https://github.com/faultoverload/sandman-doppler/blob/main/docs/controls.md). The sections below that are not about the open-firmware bridge are the original project's text for the stock firmware.
+
 This is an integration designed to allow you to access and control your Sandman Doppler inside Home Assistant. 
 
 The integration uses local control to communicate with your Doppler using our local API: https://documenter.getpostman.com/view/14527424/VVQiv24k
@@ -25,6 +27,8 @@ Anything you'd like to do with the Sandman Doppler you can control and automate 
 10. Have the Doppler screen go to blackout mode automatically once a motion sensor stops detecting motion in your room for an hour. 
 
 ## Installation
+
+(The steps below are the original project's, for the stock firmware. For the open-firmware bridge install this fork through HACS as described at the top and follow [home-assistant.md](https://github.com/faultoverload/sandman-doppler/blob/main/docs/home-assistant.md); no mobile app is needed.)
 
 You will need our mobile app to get your Doppler setup and online. It is not recommended to actively use our App and Home Assistant at the same time. 
 
@@ -52,7 +56,7 @@ registered its event webhook on the device, receives every state change and butt
 | select **Lightbar Animation** | off / sweep / pulse / comet / sparkle |
 | switch **Clock Mode** | the bridge keeps the time on the digits |
 | select **Day/Night: Mode** | day / night / auto (light-sensor thresholds are the *Night Below* / *Day Above* numbers) |
-| sensor **Voice Assistant** | unavailable / idle / listening / processing / responding / error; attributes: muted, pipeline, wake word, transcript |
+| sensor **Voice Assistant** | unavailable / idle / listening / processing / responding / error; attributes: muted, pipeline, wake word, transcript, and `wake` (the wake-word connection's diagnostics: armed, re-arms, chunks sent and dropped) |
 | switch **Microphone Mute**, **Voice: Tap to Talk Tone**, **Voice: Wake Word Tone** | replace the Alexa switches |
 | button **Voice: Start Listening** | start an Assist session (like the MIC button) |
 | select **Voice: Wake Word** | the model the device's wake service listens for (needs `SANDMAN_WAKE_URI` on the device, see below) |
@@ -100,7 +104,7 @@ port 10700 (the bridge runs a Wyoming satellite); this integration shows its sta
 `SANDMAN_WAKE_URI=tcp://<HA host>:10400` in the device's `bridge.env`. The Doppler then streams its microphone to
 that service while idle and starts the Assist pipeline at the speech stage when the word is detected, like the
 Voice Preview Edition / Satellite1 do on their own hardware; the pipeline in HA does not need a wake-word engine.
-*Voice: Wake Word* selects the model (the list comes from the add-on).
+*Voice: Wake Word* selects the model (the list comes from the add-on). In the add-on's *Network* settings the host port for 10400/tcp must be set, or the device gets "connection refused".
 
 ## Prerequisites: Finding Your Device Details
 
