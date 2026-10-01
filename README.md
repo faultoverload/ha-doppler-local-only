@@ -69,8 +69,9 @@ registered its event webhook on the device, receives every state change and butt
 **Alarms from the UI**: press *Alarm: Add New* and a disabled 07:00 alarm appears with its own entities:
 *Alarm N: Enabled* (switch), *Time*, *Name*, *Sound* (the device's sound files), *Repeat* (Once / Every day /
 Weekdays / Weekends; other day sets via the `update_alarm` service show as Custom), *Volume*, *Stream URL* and
-*Delete*. *Stream URL* makes the alarm play an internet radio station or a podcast episode (any http(s) audio
-URL) instead of its sound; the sound file takes over if the stream cannot be played. Alarm colour is still set
+*Delete*. *Stream URL* makes the alarm play an internet radio stream, a direct audio file or a podcast feed
+(RSS) URL (its newest episode, looked up ahead of the ring) instead of its sound; the sound file takes over if
+it cannot be played. Alarm colour is still set
 with `add_alarm`/`update_alarm`.
 
 **Weather**: type a place into *Weather: Location* (city, "City, ST" or "lat,lon") and turn *Weather: Displayed*

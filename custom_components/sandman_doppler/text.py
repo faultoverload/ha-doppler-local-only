@@ -88,8 +88,9 @@ class DopplerAlarmName(DopplerAlarmEntity, TextEntity):
 
 
 class DopplerAlarmStream(DopplerAlarmEntity, TextEntity):
-    """An http(s) URL (internet radio, a podcast episode) the alarm plays instead of its sound.
-    The sound file is the fallback when the stream will not play. Open-firmware bridge only.
+    """An http(s) URL the alarm plays instead of its sound: an internet radio stream, an audio
+    file or a podcast feed (its newest episode plays). The sound file is the fallback when it
+    will not play. Open-firmware bridge only.
     """
 
     suffix = "stream"
