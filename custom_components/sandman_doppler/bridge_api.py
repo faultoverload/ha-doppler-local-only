@@ -132,6 +132,11 @@ class BridgeApi:
     async def clear_external_weather(self) -> dict[str, Any]:
         return await self._call("weather/external", "PUT", {"clear": True})
 
+    async def set_small_display_colors(self, **colors: Any) -> dict[str, Any]:
+        """weather=(r, g, b) / seconds=(r, g, b); None follows the clock's colour."""
+        body = {k: (list(v) if v is not None else None) for k, v in colors.items()}
+        return await self._call("bridge/colors", "PUT", body)
+
     async def bluetooth(self, **body: Any) -> dict[str, Any]:
         """{"pairing": bool} | {"disconnect": True} | {"forget": address} -> the bluetooth state."""
         return await self._call("bridge/bluetooth", "PUT", body)

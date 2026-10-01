@@ -60,6 +60,7 @@ registered its event webhook on the device, receives every state change and butt
 | binary_sensor **Voice Satellite** | HA's Wyoming integration is connected to the device (port 10700) |
 | sensor **Alarm State**, **Next Alarm**; buttons **Snooze Alarm**, **Dismiss Alarm** | the on-device alarm engine |
 | sensor **Weather** | value shown on the temperature display; attributes: scale, icons, condition, place |
+| lights **Display: Weather Color**, **Display: Seconds Color** | colour of the temperature digits and weather icons, and of the seconds on the small display; off = follow the clock's colour |
 | binary_sensor **Audio Playing** | something is playing |
 | media_player **Speaker** | the clock as a media player: `tts.speak` targets, `media_player.play_media` with any http(s) URL or media-source item (radio, podcasts, local media), the media browser, stop, volume; also *playing* while a phone streams over Bluetooth |
 | switch **Bluetooth: Pairing Mode**, sensor **Bluetooth: Connected Device**, binary_sensor **Bluetooth: Playing**, button **Bluetooth: Disconnect** | Bluetooth speaker mode (`SANDMAN_BLUETOOTH=1` on the device): phones pair with the clock (2-minute window, blue lightbar pulse, no PIN) and play music to it |

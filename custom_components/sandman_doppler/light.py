@@ -181,6 +181,19 @@ async def async_setup_entry(
                 for description in SMART_BUTTON_LIGHT_ENTITY_DESCRIPTIONS
             ]
         )
+        entities.extend(
+            DopplerSmallDisplayLight(
+                coordinator,
+                entry,
+                device,
+                DopplerLightEntityDescription(name, name=name, icon=icon),
+                key,
+            )
+            for key, name, icon in (
+                ("weather", "Display: Weather Color", "mdi:weather-partly-cloudy"),
+                ("seconds", "Display: Seconds Color", "mdi:timer-outline"),
+            )
+        )
         entities.append(
             DopplerLightbar(
                 coordinator,
@@ -395,6 +408,52 @@ class DopplerSmartButtonLight(BaseDopplerLight):
         if (rgb_color := kwargs.get(ATTR_RGB_COLOR)) is not None:
             await self._async_set_rgb_color(rgb_color)
             self.async_write_ha_state()
+
+
+class DopplerSmallDisplayLight(
+    DopplerBridgeEntity[DopplerLightEntityDescription], LightEntity
+):
+    """Colour of the weather (temperature digits and icons) or of the seconds.
+
+    On: the chosen colour. Off: that display follows the clock's colour."""
+
+    _attr_color_mode = ColorMode.RGB
+    _attr_supported_color_modes = {ColorMode.RGB}
+
+    def __init__(self, coordinator, config_entry, device, description, key: str):
+        super().__init__(coordinator, config_entry, device, description)
+        self._key = key
+
+    @property
+    def _color(self) -> list[int] | None:
+        color = self.bridge_get("settings", f"{self._key}_color")
+        return (
+            list(color)
+            if isinstance(color, (list, tuple)) and len(color) == 3
+            else None
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        if self.bridge_get("settings") is None:
+            return None
+        return self._color is not None
+
+    @property
+    def rgb_color(self) -> tuple[int, int, int] | None:
+        color = self._color
+        return (color[0], color[1], color[2]) if color else None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        color = kwargs.get(ATTR_RGB_COLOR) or self._color or (255, 255, 255)
+        result = await self.bridge.set_small_display_colors(
+            **{self._key: tuple(int(v) for v in color)}
+        )
+        self.bridge_set("settings", {f"{self._key}_color": result.get(self._key)})
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        result = await self.bridge.set_small_display_colors(**{self._key: None})
+        self.bridge_set("settings", {f"{self._key}_color": result.get(self._key)})
 
 
 class DopplerLightbar(DopplerBridgeEntity[DopplerLightEntityDescription], LightEntity):
