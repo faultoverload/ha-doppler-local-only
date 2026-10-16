@@ -1,5 +1,5 @@
 voice_say:
-  name: Voice: say (play TTS clip)
+  name: "Voice: say (play TTS clip)"
   description: Plays a WAV/MP3 clip through the Doppler's speaker (the open-firmware bridge). Give a URL Home Assistant's TTS produced (e.g. from tts.speak's media_content_id or a media URL) or a file path on the device.
   fields:
     device_id:
@@ -24,7 +24,7 @@ voice_say:
         text:
     volume:
       name: Volume
-      description: Playback volume 0-100 (default: the current volume)
+      description: "Playback volume 0-100 (default: the current volume)"
       required: false
       selector:
         number:
@@ -81,7 +81,7 @@ alarm_ring:
           multiple: true
     id:
       name: Alarm ID
-      description: The alarm to ring (default: the first one)
+      description: "The alarm to ring (default: the first one)"
       required: false
       selector:
         number:
