@@ -139,6 +139,7 @@ async def test_a_failed_refresh_keeps_the_last_list(
     aioclient_mock.get(API, status=403)
     await index.async_refresh()
     assert index.branches() == ["main"] and "403" in index.last_error
+    assert "add a GitHub token" in index.last_error
 
 
 async def test_token_is_sent_and_broken_releases_are_skipped(

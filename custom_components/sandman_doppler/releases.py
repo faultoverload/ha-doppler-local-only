@@ -195,6 +195,15 @@ class ReleasesIndex:
             async with session.get(
                 url, headers=self._headers(accept), timeout=TIMEOUT
             ) as resp:
+                if resp.status in (401, 403, 404):
+                    hint = (
+                        "the token is not accepted or lacks read access to contents"
+                        if self.token
+                        else "the repository is private or does not exist: add a GitHub token in the integration's options"
+                    )
+                    raise ReleasesError(
+                        f"GitHub answered {resp.status} for {url} ({hint})"
+                    )
                 if resp.status != 200:
                     raise ReleasesError(f"GitHub answered {resp.status} for {url}")
                 if int(resp.headers.get("Content-Length") or 0) > limit:
@@ -262,8 +271,10 @@ class ReleasesIndex:
             self.channels = channels
             self.last_error = None
         except (ReleasesError, ValueError, TypeError) as exc:
+            # warn when the problem is new or changes, not every 30 minutes
+            level = logging.DEBUG if str(exc) == self.last_error else logging.WARNING
             self.last_error = str(exc)
-            _LOGGER.warning("Could not list Sandman Doppler releases: %s", exc)
+            _LOGGER.log(level, "Could not list Sandman Doppler releases: %s", exc)
         async_dispatcher_send(self.hass, SIGNAL_RELEASES)
 
     async def async_fetch(self, channel: Channel, filename: str) -> bytes:
