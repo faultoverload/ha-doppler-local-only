@@ -155,13 +155,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     DopplerServices(hass, ent_reg, dev_reg, client).async_register()
 
     coordinator.async_setup_weather_feed()
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    # No update listener here: the options flow is an OptionsFlowWithReload, which reloads the entry
+    # itself, and Home Assistant refuses to save options when both exist (HTTP 500 on submit).
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Handle removal of an entry."""
+    """Handle removal of an entry (also the first half of the reload after an options change)."""
+    if not entry.options.get(CONF_WEATHER_ENTITY):
+        # no HA weather feed (any more): hand the display back to the device's own fetcher
+        for value in hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).values():
+            if isinstance(value, DopplerDataUpdateCoordinator):
+                try:
+                    await value.bridge.clear_external_weather()
+                except DopplerException:
+                    pass
     unloaded = all(
         await asyncio.gather(
             *[
@@ -174,21 +183,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unloaded
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry (also after an options change)."""
-    if not entry.options.get(CONF_WEATHER_ENTITY):
-        # the weather feed was switched off: hand the display back to the device's own fetcher
-        for entry_data in [hass.data.get(DOMAIN, {}).get(entry.entry_id, {})]:
-            for value in entry_data.values():
-                if isinstance(value, DopplerDataUpdateCoordinator):
-                    try:
-                        await value.bridge.clear_external_weather()
-                    except DopplerException:
-                        pass
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
 
 
 class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
