@@ -27,14 +27,18 @@ from .const import (
     ALEXA_UNIQUE_ID_SUFFIXES,
     ATTR_BRIDGE,
     CONF_DSN,
+    CONF_GITHUB_TOKEN,
     CONF_HOST,
     CONF_LOCAL_KEY,
     CONF_PORT,
+    CONF_UPDATE_REPO,
     CONF_WEATHER_ENTITY,
     CONF_WEATHER_SCALE,
+    DATA_RELEASES,
     DOMAIN,
 )
-from .http import DopplerEventView, DopplerWebhookView
+from .http import DopplerEventView, DopplerUpdateView, DopplerWebhookView
+from .releases import ReleasesIndex
 from .services import DopplerServices
 
 SCAN_INTERVAL = timedelta(seconds=60)
@@ -53,6 +57,7 @@ PLATFORMS = [
     Platform.SWITCH,
     Platform.TEXT,
     Platform.TIME,
+    Platform.UPDATE,
 ]
 
 
@@ -60,12 +65,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Sandman Doppler component."""
     hass.http.register_view(DopplerWebhookView())
     hass.http.register_view(DopplerEventView())
+    hass.http.register_view(DopplerUpdateView())
+    hass.data[DATA_RELEASES] = ReleasesIndex(
+        hass
+    )  # the branches the bridge software can be updated to
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up config entry (local-only, no cloud auth)."""
     hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
+    if (releases := hass.data.get(DATA_RELEASES)) is not None:
+        releases.configure(
+            entry.options.get(CONF_UPDATE_REPO), entry.options.get(CONF_GITHUB_TOKEN)
+        )
+        releases.start()
 
     # Read local config from entry
     host = entry.data[CONF_HOST]
@@ -211,6 +225,7 @@ class DopplerDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             prefer_external=False,
             prefer_cloud=False,
         )
+        self.base_url = base_url  # how the clock reaches this Home Assistant (webhooks, update downloads)
         self._webhook_url = (
             f"{base_url}/api/sandman_doppler/smart_button/{device_entry.id}"
         )

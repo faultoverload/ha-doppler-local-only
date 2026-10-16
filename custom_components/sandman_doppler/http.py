@@ -18,6 +18,7 @@ from .const import (
     ATTR_DOPPLER_NAME,
     ATTR_DSN,
     ATTR_TOPIC,
+    DATA_RELEASES,
     DOMAIN,
     EVENT_ALARM_EVENT,
     EVENT_BUTTON_EVENT,
@@ -25,6 +26,7 @@ from .const import (
     EVENT_VOICE_REQUEST,
 )
 from .bridge_api import SECTION_FOR_TOPIC
+from .releases import FILES, MANIFEST, ReleasesError, device_manifest
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,3 +146,43 @@ class DopplerEventView(HomeAssistantView):
         else:
             coordinator.apply_bridge_update(topic, data)
         return Response(status=HTTPStatus.OK)
+
+
+class DopplerUpdateView(HomeAssistantView):
+    """Serves one branch's signed bridge build to the clock (update.py points the clock here).
+
+    The clock cannot reach GitHub's private releases or this instance's LAN address, only the same
+    URL the event webhook uses. The device id in the path is the secret that keeps this from being
+    an open mirror of the (possibly private) releases; the files are signed, and the clock verifies
+    the signature itself."""
+
+    requires_auth = False
+    cors_allowed = False
+    url = r"/api/sandman_doppler/updates/{device_id}/{tag}/{filename}"
+    name = "api:sandman_doppler:updates"
+
+    async def get(
+        self, request: Request, device_id: str, tag: str, filename: str
+    ) -> Response:
+        hass: HomeAssistant = request.app["hass"]
+        device = dr.async_get(hass).async_get(device_id)
+        if (
+            device is None
+            or not any(identifier[0] == DOMAIN for identifier in device.identifiers)
+            or filename not in FILES
+        ):
+            return Response(status=HTTPStatus.NOT_FOUND)
+        index = hass.data.get(DATA_RELEASES)
+        channel = index.by_tag(tag) if index is not None else None
+        if channel is None:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        if filename == MANIFEST:
+            return self.json(device_manifest(channel))
+        try:
+            body = await index.async_fetch(channel, filename)
+        except ReleasesError as exc:
+            _LOGGER.warning(
+                "Could not fetch %s of %s for the clock: %s", filename, tag, exc
+            )
+            return Response(status=HTTPStatus.BAD_GATEWAY)
+        return Response(body=body, content_type="application/octet-stream")

@@ -58,3 +58,13 @@ ALEXA_UNIQUE_ID_SUFFIXES = (
     "_alexa_wake_word_tone",
     "_ascending_alarms",
 )
+
+# Bridge self-update (releases.py, update.py): the clock's own code is replaced from signed builds that
+# the sandman-doppler repo's CI publishes as one GitHub prerelease per branch; Home Assistant lists
+# them, serves the chosen one to the clock and verifies nothing itself (the clock checks the signature).
+CONF_UPDATE_REPO = "update_repo"  # "owner/name"
+CONF_GITHUB_TOKEN = "github_token"  # only while the repository is private
+DEFAULT_UPDATE_REPO = "faultoverload/sandman-doppler"
+DEFAULT_UPDATE_BRANCH = "main"
+DATA_RELEASES = f"{DOMAIN}_releases"
+SIGNAL_RELEASES = f"{DOMAIN}_releases_changed"

@@ -25,10 +25,12 @@
   "options": {
     "step": {
       "init": {
-        "title": "Weather on the Doppler's display",
+        "title": "Weather and software updates",
         "data": {
           "weather_entity": "Home Assistant weather entity to show (leave empty to let the device fetch Open-Meteo for its Weather: Location)",
-          "weather_scale": "Temperature scale on the display (auto = the entity's unit)"
+          "weather_scale": "Temperature scale on the display (auto = the entity's unit)",
+          "update_repo": "GitHub repository whose CI publishes the bridge software builds (owner/name)",
+          "github_token": "GitHub token to read those builds (only needed while the repository is private; read access to contents)"
         }
       }
     }

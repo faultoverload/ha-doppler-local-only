@@ -20,6 +20,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_DSN,
+    CONF_GITHUB_TOKEN,
+    CONF_UPDATE_REPO,
+    DEFAULT_UPDATE_REPO,
     CONF_LOCAL_KEY,
     CONF_WEATHER_ENTITY,
     CONF_WEATHER_SCALE,
@@ -194,6 +197,16 @@ class DopplerOptionsFlow(config_entries.OptionsFlowWithReload):
                         options=["auto", "F", "C"],
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
+                ),
+                vol.Optional(
+                    CONF_UPDATE_REPO,
+                    default=options.get(CONF_UPDATE_REPO, DEFAULT_UPDATE_REPO),
+                ): str,
+                vol.Optional(
+                    CONF_GITHUB_TOKEN,
+                    description={"suggested_value": options.get(CONF_GITHUB_TOKEN, "")},
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
                 ),
             }
         )

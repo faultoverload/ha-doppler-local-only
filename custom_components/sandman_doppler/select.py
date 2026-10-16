@@ -22,11 +22,12 @@ from homeassistant.components.select import SelectEntity, SelectEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DopplerDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DATA_RELEASES, DEFAULT_UPDATE_BRANCH, DOMAIN, SIGNAL_RELEASES
 from .alarm_entities import (
     REPEAT_CUSTOM,
     REPEAT_OPTIONS,
@@ -197,6 +198,19 @@ async def async_setup_entry(
             )
             for i in range(4)
         )
+        entities.append(
+            DopplerUpdateBranchSelect(
+                coordinator,
+                entry,
+                device,
+                SelectEntityDescription(
+                    "Update Branch",
+                    name="Update: Branch",
+                    icon="mdi:source-branch",
+                    entity_category=EntityCategory.CONFIG,
+                ),
+            )
+        )
         async_add_devices(entities)
         setup_alarm_entities(
             hass,
@@ -211,6 +225,53 @@ async def async_setup_entry(
             hass, f"{DOMAIN}_{entry.entry_id}_device_added", async_add_device
         )
     )
+
+
+class DopplerUpdateBranchSelect(
+    DopplerBridgeEntity[SelectEntityDescription], SelectEntity, RestoreEntity
+):
+    """Which branch of the sandman-doppler repo the clock's bridge software follows (main by default).
+    The Bridge Software update entity installs the latest build of this branch; branches appear here
+    once CI has published a build of them."""
+
+    @property
+    def _index(self):
+        return self.hass.data[DATA_RELEASES]
+
+    @property
+    def options(self) -> list[str]:
+        names = list(self._index.branches())
+        chosen = self._index.selected(self.device.dsn)
+        if chosen not in names:
+            names.append(
+                chosen
+            )  # still shown if its build has not been published (yet / any more)
+        return names
+
+    @property
+    def current_option(self) -> str:
+        return self._index.selected(self.device.dsn)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (
+            last := await self.async_get_last_state()
+        ) is not None and last.state not in (
+            "unknown",
+            "unavailable",
+            "",
+        ):
+            self._index.select(self.device.dsn, last.state)
+        else:
+            self._index.select(self.device.dsn, DEFAULT_UPDATE_BRANCH)
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_RELEASES, self.async_write_ha_state
+            )
+        )
+
+    async def async_select_option(self, option: str) -> None:
+        self._index.select(self.device.dsn, option)
 
 
 class DopplerEnumSelect(

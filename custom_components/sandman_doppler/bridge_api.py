@@ -50,6 +50,21 @@ class BridgeApi:
     async def set_webhook(self, url: str) -> dict[str, Any]:
         return await self._call("bridge/webhook", "PUT", {"url": url})
 
+    # self-update of the bridge software (updater.py on the device)
+    async def update_status(self) -> dict[str, Any]:
+        return await self._call("bridge/update")
+
+    async def update_set_url(self, url: str) -> dict[str, Any]:
+        return await self._call("bridge/update/url", "PUT", {"url": url})
+
+    async def update_check(self) -> dict[str, Any]:
+        return await self._call("bridge/update/check", "POST", {})
+
+    async def update_install(self, release: str, sha256: str) -> dict[str, Any]:
+        return await self._call(
+            "bridge/update/install", "POST", {"release": release, "sha256": sha256}
+        )
+
     # display
     async def set_clock(self, enabled: bool) -> dict[str, Any]:
         return await self._call("bridge/clock", "PUT", {"enabled": bool(enabled)})
