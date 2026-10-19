@@ -180,6 +180,14 @@ class DopplerOptionsFlow(config_entries.OptionsFlowWithReload):
                 user_input[CONF_WEATHER_ENTITY] = ""
             return self.async_create_entry(title="", data=user_input)
         options = self.config_entry.options
+        if self.config_entry.update_listeners:
+            # Home Assistant refuses to save the options while the entry has update listeners:
+            # say which ones, so a leftover registration can be found.
+            _LOGGER.warning(
+                "Update listeners on %s (they make saving the options fail): %s",
+                self.config_entry.title,
+                self.config_entry.update_listeners,
+            )
         schema = vol.Schema(
             {
                 vol.Optional(
